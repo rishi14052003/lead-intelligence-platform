@@ -11,7 +11,10 @@ function StatCard({
   iconVariant = "violet", 
   meta = "",
   onClick,
-  style 
+  style,
+  valueClassName = "",
+  labelClassName = "",
+  iconSize = 16
 }: { 
   label: string; 
   value: string; 
@@ -21,17 +24,20 @@ function StatCard({
   meta?: string; 
   onClick?: () => void;
   style?: React.CSSProperties;
+  valueClassName?: string;
+  labelClassName?: string;
+  iconSize?: number;
 }) {
   return (
     <div className={`stat-card ${variant}`} onClick={onClick} style={style}>
       <div className="stat-top">
         <div>
-          <div className="stat-label">{label}</div>
-          <div className={`stat-value ${variant}-text`} style={{ marginTop: 6 }}>{value}</div>
+          <div className={labelClassName || "stat-label"}>{label}</div>
+          <div className={valueClassName || `stat-value ${variant}-text`} style={{ marginTop: 6 }}>{value}</div>
           {meta && <div className="stat-meta">{meta}</div>}
         </div>
         <div className={`stat-icon ${iconVariant}`}>
-          {IconComp && <IconComp size={16} />}
+          {IconComp && <IconComp size={iconSize} />}
         </div>
       </div>
     </div>
@@ -107,6 +113,9 @@ export default function Dashboard() {
           value="Start" 
           icon={Search} 
           iconVariant="violet"
+          labelClassName="stat-action-label"
+          valueClassName="stat-action-value"
+          iconSize={19}
           onClick={() => { navigate("search"); toggleActionSelection(0); }}
           style={{ cursor: "pointer" }}
         />
@@ -115,6 +124,9 @@ export default function Dashboard() {
           value="Manage" 
           icon={Bookmark} 
           iconVariant="violet"
+          labelClassName="stat-action-label"
+          valueClassName="stat-action-value"
+          iconSize={19}
           onClick={() => { navigate("saved"); toggleActionSelection(1); }}
           style={{ cursor: "pointer" }}
         />
@@ -123,6 +135,9 @@ export default function Dashboard() {
           value="Check" 
           icon={Clock} 
           iconVariant="violet"
+          labelClassName="stat-action-label"
+          valueClassName="stat-action-value"
+          iconSize={19}
           onClick={() => { navigate("history"); toggleActionSelection(2); }}
           style={{ cursor: "pointer" }}
         />

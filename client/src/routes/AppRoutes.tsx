@@ -16,6 +16,9 @@ const NAV_ITEMS = [
 ];
 
 function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavigate: (page: string) => void }) {
+  const userName = "User";
+  const userAvatarLetter = (userName.trim()[0] || "U").toUpperCase();
+
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
@@ -43,10 +46,9 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
 
       <div className="sidebar-footer">
         <div className="user-card">
-          <div className="user-avatar">U</div>
+          <div className="user-avatar">{userAvatarLetter}</div>
           <div>
-            <div className="user-name">User</div>
-            <div className="user-role">Free Plan</div>
+            <div className="user-name">{userName}</div>
           </div>
         </div>
       </div>
