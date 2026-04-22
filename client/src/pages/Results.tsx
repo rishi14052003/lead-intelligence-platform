@@ -103,10 +103,10 @@ export default function Results() {
 
       {/* Stats Grid */}
       <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
-        <StatCard label="Total Leads" value={leads.length.toString()} icon={Users} variant="accent" iconVariant="violet" />
-        <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} variant="green" iconVariant="emerald" />
-        <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} variant="blue" iconVariant="sky" />
-        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Search} variant="orange" iconVariant="amber" />
+        <StatCard label="Total Leads" value={leads.length.toString()} icon={Users} iconVariant="violet" />
+        <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} iconVariant="violet" />
+        <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
+        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Search} iconVariant="violet" />
       </div>
 
       <div className="card" style={{ marginBottom: 14, height: "600px" }}>

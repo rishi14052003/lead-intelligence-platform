@@ -80,10 +80,10 @@ export default function SavedLeads() {
 
       {/* Stats Grid */}
       <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
-        <StatCard label="Total Saved" value={leads.length.toString()} icon={Bookmark} variant="green" iconVariant="emerald" />
-        <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} variant="accent" iconVariant="violet" />
-        <StatCard label="LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} variant="blue" iconVariant="sky" />
-        <StatCard label="High Score" value={leads.filter(l => l.score >= 80).length.toString()} icon={Star} variant="orange" iconVariant="amber" />
+        <StatCard label="Total Saved" value={leads.length.toString()} icon={Bookmark} iconVariant="violet" />
+        <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} iconVariant="violet" />
+        <StatCard label="LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
+        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Star} iconVariant="violet" />
       </div>
 
       <div className="card" style={{ height: "600px" }}>

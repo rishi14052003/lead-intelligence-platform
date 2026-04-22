@@ -78,10 +78,10 @@ export default function History() {
 
       {/* Stats Grid */}
       <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
-        <StatCard label="High Score" value="0" icon={Search} variant="orange" iconVariant="amber" />
-        <StatCard label="Companies Found" value="0" icon={Search} variant="green" iconVariant="emerald" />
-        <StatCard label="Leads Discovered" value="0" icon={Bookmark} variant="accent" iconVariant="violet" />
-        <StatCard label="Success Rate" value="0%" icon={TrendingUp} variant="orange" iconVariant="amber" />
+        <StatCard label="High Score" value="0" icon={Search} iconVariant="violet" />
+        <StatCard label="Companies Found" value="0" icon={Search} iconVariant="violet" />
+        <StatCard label="Leads Discovered" value="0" icon={Bookmark} iconVariant="violet" />
+        <StatCard label="Success Rate" value="0%" icon={TrendingUp} iconVariant="violet" />
       </div>
 
       {/* Main Content Grid */}

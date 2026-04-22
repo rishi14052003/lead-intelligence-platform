@@ -9,7 +9,9 @@ function StatCard({
   icon: IconComp, 
   variant = "", 
   iconVariant = "violet", 
-  meta = "" 
+  meta = "",
+  onClick,
+  style 
 }: { 
   label: string; 
   value: string; 
@@ -17,9 +19,11 @@ function StatCard({
   variant?: string; 
   iconVariant?: string; 
   meta?: string; 
+  onClick?: () => void;
+  style?: React.CSSProperties;
 }) {
   return (
-    <div className={`stat-card ${variant}`}>
+    <div className={`stat-card ${variant}`} onClick={onClick} style={style}>
       <div className="stat-top">
         <div>
           <div className="stat-label">{label}</div>
@@ -91,72 +95,37 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="stats-grid stats-4">
         <StatCard label="Total Leads" value="0" icon={Users} iconVariant="violet" />
-        <StatCard label="Saved Leads" value="0" icon={Bookmark} variant="green" iconVariant="emerald" />
-        <StatCard label="Searches" value="0" icon={Search} variant="blue" iconVariant="sky" />
-        <StatCard label="Conversion" value="0%" icon={TrendingUp} variant="purple" iconVariant="lilac" />
+        <StatCard label="Saved Leads" value="0" icon={Bookmark} iconVariant="violet" />
+        <StatCard label="Searches" value="0" icon={Search} iconVariant="violet" />
+        <StatCard label="Conversion" value="0%" icon={TrendingUp} iconVariant="violet" />
       </div>
 
       {/* Quick Actions */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-header"><span className="card-title">Quick Actions</span></div>
-        <div className="card-body">
-          <div className="quick-actions">
-            <div className="quick-action" onClick={() => { navigate("search"); toggleActionSelection(0); }} style={{ cursor: "pointer" }}>
-              <div className="qa-icon" style={{ background: "rgba(108,99,255,0.2)", color: "var(--accent2)" }}>
-                <Search size={16} />
-              </div>
-              <div className="qa-title">New Search</div>
-              <div className="qa-sub">Find leads for a company</div>
-              {selectedActions.has(0) && (
-                <div style={{ 
-                  position: "absolute",
-                  top: 8,
-                  right: 8,
-                  width: 8, 
-                  height: 8, 
-                  borderRadius: "50%", 
-                  backgroundColor: "#3b82f6"
-                }} />
-              )}
-            </div>
-            <div className="quick-action" onClick={() => { navigate("saved"); toggleActionSelection(1); }} style={{ cursor: "pointer" }}>
-              <div className="qa-icon" style={{ background: "rgba(16,185,129,0.2)", color: "var(--green)" }}>
-                <Bookmark size={16} />
-              </div>
-              <div className="qa-title">View Saved</div>
-              <div className="qa-sub">Manage your saved leads</div>
-              {selectedActions.has(1) && (
-                <div style={{ 
-                  position: "absolute",
-                  top: 8,
-                  right: 8,
-                  width: 8, 
-                  height: 8, 
-                  borderRadius: "50%", 
-                  backgroundColor: "#3b82f6"
-                }} />
-              )}
-            </div>
-            <div className="quick-action" onClick={() => { navigate("history"); toggleActionSelection(2); }} style={{ cursor: "pointer" }}>
-              <div className="qa-icon" style={{ background: "rgba(167,139,250,0.2)", color: "var(--accent2)" }}>
-                <Clock size={16} />
-              </div>
-              <div className="qa-title">View History</div>
-              <div className="qa-sub">Check past searches</div>
-              {selectedActions.has(2) && (
-                <div style={{ 
-                  position: "absolute",
-                  top: 8,
-                  right: 8,
-                  width: 8, 
-                  height: 8, 
-                  borderRadius: "50%", 
-                  backgroundColor: "#3b82f6"
-                }} />
-              )}
-            </div>
-          </div>
-        </div>
+      <div className="stats-grid stats-3" style={{ marginBottom: 14 }}>
+        <StatCard 
+          label="New Search" 
+          value="Start" 
+          icon={Search} 
+          iconVariant="violet"
+          onClick={() => { navigate("search"); toggleActionSelection(0); }}
+          style={{ cursor: "pointer" }}
+        />
+        <StatCard 
+          label="View Saved" 
+          value="Manage" 
+          icon={Bookmark} 
+          iconVariant="violet"
+          onClick={() => { navigate("saved"); toggleActionSelection(1); }}
+          style={{ cursor: "pointer" }}
+        />
+        <StatCard 
+          label="View History" 
+          value="Check" 
+          icon={Clock} 
+          iconVariant="violet"
+          onClick={() => { navigate("history"); toggleActionSelection(2); }}
+          style={{ cursor: "pointer" }}
+        />
       </div>
 
       <div className="row" style={{ display: 'flex', gap: '14px' }}>
