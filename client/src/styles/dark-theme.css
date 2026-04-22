@@ -21,7 +21,7 @@
   --red: #ef4444;
   --orange: #f97316;
   --glow: rgba(249, 115, 22, 0.1);
-  --sidebar-w: 220px;
+  --sidebar-w: 280px;
   --topbar-h: 60px;
 }
 
@@ -95,8 +95,14 @@ html, body, #root { height: 100%; background: var(--bg); }
   letter-spacing: -0.3px;
 }
 
+[data-theme="dark"] .logo-text {
+  font-size: 24px;
+  letter-spacing: -0.4px;
+  line-height: 1;
+}
+
 .logo-sub {
-  font-size: 10px;
+  font-size: 24px;
   color: var(--text2);
   font-weight: 400;
   letter-spacing: 0.5px;
@@ -124,7 +130,7 @@ html, body, #root { height: 100%; background: var(--bg); }
   cursor: pointer;
   transition: all 0.15s ease;
   color: var(--text2);
-  font-size: 13.5px;
+  font-size: 20px;
   font-weight: 500;
   margin-bottom: 1px;
   border: 1px solid transparent;

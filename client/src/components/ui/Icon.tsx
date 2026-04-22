@@ -5,7 +5,7 @@ interface IconProps {
   [key: string]: any;
 }
 
-export function Icon({ d, size = 16, color = "currentColor", ...props }: IconProps) {
+export function Icon({ d, size = 20, color = "currentColor", ...props }: IconProps) {
   return (
     <svg
       width={size}

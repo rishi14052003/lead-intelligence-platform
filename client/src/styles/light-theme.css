@@ -9,9 +9,9 @@
   --surface3: #eeeeee;
   --border: rgba(0, 0, 0, 0.08);
   --border2: rgba(0, 0, 0, 0.12);
-  --text: #1a1a1a;
-  --text2: #666666;
-  --text3: #999999;
+  --text: #000000;
+  --text2: #333333;
+  --text3: #666666;
   --accent: #f97316;
   --accent2: #ea580c;
   --accent3: #fb923c;
@@ -20,7 +20,7 @@
   --red: #ef4444;
   --orange: #f97316;
   --glow: rgba(249, 115, 22, 0.1);
-  --sidebar-w: 220px;
+  --sidebar-w: 280px;
   --topbar-h: 60px;
 }
 
@@ -89,7 +89,7 @@ body {
 .logo-text {
   font-family: 'Montserrat', sans-serif;
   font-weight: 800;
-  font-size: 15.5px;
+  font-size: 24px;
   letter-spacing: -0.4px;
   line-height: 1;
 }
@@ -113,7 +113,7 @@ body {
 
 /* "Intelligence" sub-label */
 .logo-sub {
-  font-size: 9.5px;
+  font-size: 24px;
   font-weight: 600;
   letter-spacing: 1.8px;
   text-transform: uppercase;
@@ -152,7 +152,7 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
   color: var(--text2);
-  font-size: 13.5px;
+  font-size: 20px;
   font-weight: 500;
   margin-bottom: 1px;
   border: 1px solid transparent;
@@ -172,7 +172,7 @@ body {
 }
 
 .nav-icon {
-  width: 16px; height: 16px;
+  width: 20px; height: 20px;
   flex-shrink: 0;
   opacity: 0.7;
 }
@@ -241,7 +241,7 @@ body {
 /* "LeadFinder" breadcrumb text */
 .breadcrumb {
   font-family: 'Montserrat', sans-serif;
-  font-size: 14.5px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.3px;
 }
@@ -279,8 +279,8 @@ body {
 
 /* ── Icon buttons: shared base ── */
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -330,19 +330,22 @@ body {
 
 /* ── Avatar ── */
 .topbar-avatar {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: white;
   cursor: pointer;
   flex-shrink: 0;
   transition: box-shadow 0.15s ease, transform 0.1s ease;
+  border: none;
+  padding: 0;
+}
+
+.topbar-avatar svg {
+  color: white;
 }
 
 :root .topbar-avatar,
@@ -403,33 +406,33 @@ body {
 .stats-2 { grid-template-columns: repeat(2, 1fr); }
 
 .stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border: 1px solid rgba(249, 115, 22, 0.4);
   border-radius: 12px;
   padding: 18px 20px;
   transition: border-color 0.2s;
 }
-.stat-card:hover { border-color: var(--border2); }
+.stat-card:hover { border-color: rgba(249, 115, 22, 0.6); }
 
 .stat-card.accent {
-  background: linear-gradient(135deg, rgba(108,99,255,0.15), rgba(167,139,250,0.08));
-  border-color: rgba(108,99,255,0.25);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border-color: rgba(249, 115, 22, 0.4);
 }
 .stat-card.green {
-  background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.06));
-  border-color: rgba(16,185,129,0.2);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border-color: rgba(249, 115, 22, 0.4);
 }
 .stat-card.blue {
-  background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(56,189,248,0.06));
-  border-color: rgba(56,189,248,0.2);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border-color: rgba(249, 115, 22, 0.4);
 }
 .stat-card.orange {
-  background: linear-gradient(135deg, rgba(249,115,22,0.12), rgba(249,115,22,0.06));
-  border-color: rgba(249,115,22,0.2);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border-color: rgba(249, 115, 22, 0.4);
 }
 .stat-card.purple {
-  background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(167,139,250,0.06));
-  border-color: rgba(167,139,250,0.2);
+  background: linear-gradient(135deg, rgba(255, 237, 213, 0.5), rgba(255, 213, 179, 0.3));
+  border-color: rgba(249, 115, 22, 0.4);
 }
 
 .stat-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }

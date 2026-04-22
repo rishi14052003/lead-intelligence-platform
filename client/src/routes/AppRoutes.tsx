@@ -5,7 +5,7 @@ import Results from "../pages/Results";
 import Dashboard from "../pages/Dashboard";
 import SavedLeads from "../pages/SavedLeads";
 import History from "../pages/History";
-import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun } from "lucide-react";
+import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun, User } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -21,8 +21,8 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
       <div className="sidebar-logo">
         <div className="logo-icon">L</div>
         <div>
-          <div className="logo-text">LeadFinder</div>
-          <div className="logo-sub">Intelligence</div>
+          <div className="logo-text" style={{ fontSize: "24px" }}>LeadFinder</div>
+          <div className="logo-sub" style={{ fontSize: "24px" }}>Intelligence</div>
         </div>
       </div>
 
@@ -34,7 +34,7 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
             className={`nav-item ${currentPage === item.id ? "active" : ""}`}
             onClick={() => onNavigate(item.id)}
           >
-            <span className="nav-icon">{<item.icon size={16} />}</span>
+            <span className="nav-icon">{<item.icon size={20} />}</span>
             {item.label}
             {currentPage === item.id && <span className="nav-dot" />}
           </div>
@@ -82,27 +82,29 @@ function DarkTopbar({
           title="Toggle Theme"
           onClick={onToggleTheme}
         >
-          {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+          {theme === "light" ? <Moon size={24} /> : <Sun size={24} />}
         </button>
         <button
           className="icon-btn"
           title="Notifications"
           onClick={onToggleNotifications}
         >
-          <Bell size={16} />
+          <Bell size={24} />
         </button>
         <button
           className="icon-btn"
           title="Settings"
           onClick={onToggleSettings}
         >
-          <Settings size={16} />
+          <Settings size={24} />
         </button>
         <button className="icon-btn" title="Refresh">
-          <RefreshCw size={16} />
+          <RefreshCw size={24} />
         </button>
         <div className="topbar-right-sep" />
-        <div className="topbar-avatar">U</div>
+        <button className="icon-btn topbar-avatar" title="Account">
+          <User size={24} />
+        </button>
       </div>
     </div>
   );
