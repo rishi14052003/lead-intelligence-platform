@@ -21,7 +21,7 @@ export default function SearchPage() {
   return (
     <div>
       <div className="search-hero" style={{ padding: "10px 0 32px" }}>
-        <div className="hero-pill">
+        <div className="hero-pill" style={{ fontSize: "16px" }}>
           <Zap size={12} /> AI-Powered Lead Discovery
         </div>
         <div className="hero-title">
@@ -32,7 +32,7 @@ export default function SearchPage() {
         </div>
 
         <div className="search-box" style={{ padding: "48px", height: "400px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <div className="search-label">Company Domain</div>
+          <div className="search-label" style={{ fontSize: "14px" }}>Enter your company domain</div>
           <form onSubmit={onSearch}>
             <div className="search-input-wrap">
               <SearchIcon className="search-input-icon" size={16} />
@@ -41,6 +41,10 @@ export default function SearchPage() {
                 placeholder="e.g. tesla.com, stripe.com"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                style={{ 
+                  color: "#ff6b35",
+                  opacity: "0.7"
+                }}
               />
             </div>
             <button
@@ -48,10 +52,10 @@ export default function SearchPage() {
               className="btn btn-primary"
               style={{ 
                 border: "2px solid #ffffff", 
-                backgroundColor: "#6c63ff",
-                boxShadow: "0 4px 20px rgba(108, 99, 255, 0.3)",
+                background: "linear-gradient(135deg, #ff6b35, #f7931e, #ff9500)",
+                boxShadow: "0 4px 20px rgba(255, 107, 53, 0.4)",
                 padding: "8px 16px",
-                fontSize: "12px",
+                fontSize: "13px",
                 width: "50%",
                 textAlign: "center",
                 display: "flex",
@@ -65,7 +69,7 @@ export default function SearchPage() {
               {loading ? (
                 <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, margin: 0 }} /> Searching...</>
               ) : (
-                <><SearchIcon size={16} /> <span style={{ fontSize: "13px" }}>Search Leads</span></>
+                <><SearchIcon size={16} /> <strong style={{ fontSize: "18px" }}>Search Leads</strong></>
               )}
             </button>
           </form>
