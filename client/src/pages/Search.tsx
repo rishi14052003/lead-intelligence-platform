@@ -25,7 +25,7 @@ export default function SearchPage() {
           <Zap size={12} /> AI-Powered Lead Discovery
         </div>
         <div className="hero-title">
-          Find <span className="grad">Decision Makers</span><br />at any company
+          Find <span className="grad">Decision Makers</span> at any company
         </div>
         <div className="hero-sub">
           Discover CEOs, CTOs, HR leads, and more. Enter a company domain to instantly surface verified contacts.
