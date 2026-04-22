@@ -45,13 +45,27 @@ export default function SearchPage() {
             </div>
             <button
               type="submit"
-              className="btn btn-primary btn-xl"
+              className="btn btn-primary"
+              style={{ 
+                border: "2px solid #ffffff", 
+                backgroundColor: "#6c63ff",
+                boxShadow: "0 4px 20px rgba(108, 99, 255, 0.3)",
+                padding: "8px 16px",
+                fontSize: "12px",
+                width: "50%",
+                textAlign: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto",
+                fontWeight: "bold"
+              }}
               disabled={loading || !query.trim()}
             >
               {loading ? (
                 <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, margin: 0 }} /> Searching...</>
               ) : (
-                <><SearchIcon size={16} /> Search Leads</>
+                <><SearchIcon size={16} /> <span style={{ fontSize: "13px" }}>Search Leads</span></>
               )}
             </button>
           </form>
