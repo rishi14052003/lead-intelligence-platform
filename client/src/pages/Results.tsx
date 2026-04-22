@@ -71,7 +71,6 @@ export default function Results() {
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
-  const error = useLeadStore((s) => s.error);
   
   const roles = ["All", "CEO", "CTO", "VP of Sales", "Head of HR", "Engineering Manager"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
@@ -107,7 +106,7 @@ export default function Results() {
         <StatCard label="Total Leads" value={leads.length.toString()} icon={Users} variant="accent" iconVariant="violet" />
         <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} variant="green" iconVariant="emerald" />
         <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} variant="blue" iconVariant="sky" />
-        <StatCard label="High Score" value={leads.filter(l => l.score >= 80).length.toString()} icon={Search} variant="orange" iconVariant="amber" />
+        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Search} variant="orange" iconVariant="amber" />
       </div>
 
       <div className="card" style={{ marginBottom: 14, height: "600px" }}>

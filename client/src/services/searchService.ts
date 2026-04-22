@@ -1,4 +1,3 @@
-import api from "./api";
 
 export interface Lead {
   name: string;
@@ -46,7 +45,7 @@ const mockLeads: Lead[] = [
   }
 ];
 
-export async function searchLeads(query: string) {
+export async function searchLeads(_query: string) {
   await new Promise(resolve => setTimeout(resolve, 1500));
   
   return mockLeads;
