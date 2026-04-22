@@ -22,8 +22,10 @@ export const useLeadStore = create<State>((set) => ({
     try {
       const leads = await searchLeads(query);
       set({ leads, loading: false });
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err.message || "Unknown error";
+    } catch (err: unknown) {
+      let msg = "Unknown error";
+      if (typeof err === "string") msg = err;
+      else if (typeof err === "object" && err !== null && "message" in err && typeof (err as { message?: unknown }).message === "string") msg = (err as { message: string }).message;
       set({ error: msg, loading: false });
     }
   },

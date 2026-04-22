@@ -1,4 +1,3 @@
-import React from "react";
 import { useLeadStore } from "../../store/leadStore";
 
 const ROLES = ["All", "CEO", "CTO", "HR"];
