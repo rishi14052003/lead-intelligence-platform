@@ -8,10 +8,10 @@ import History from "../pages/History";
 import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun } from "lucide-react";
 
 const NAV_ITEMS = [
-  { id: "search", label: "Search", icon: Search },
-  { id: "results", label: "Results", icon: List },
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "search", label: "Search", icon: Search },
   { id: "saved", label: "Saved Leads", icon: Bookmark },
+  { id: "results", label: "Results", icon: List },
   { id: "history", label: "History", icon: Clock },
 ];
 
@@ -109,7 +109,7 @@ function DarkTopbar({
 }
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const [currentPage, setCurrentPage] = useState("search");
+  const [currentPage, setCurrentPage] = useState("dashboard");
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -117,7 +117,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const path = location.pathname.replace("/", "") || "search";
+    const path = location.pathname.replace("/", "") || "dashboard";
     setCurrentPage(path);
   }, [location]);
 
@@ -258,7 +258,7 @@ export default function AppRoutes() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<SearchPage />} />
+          <Route path="/" element={<Dashboard />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/results" element={<Results />} />
           <Route path="/dashboard" element={<Dashboard />} />

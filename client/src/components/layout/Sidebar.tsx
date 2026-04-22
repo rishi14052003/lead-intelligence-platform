@@ -3,10 +3,10 @@ import { useState } from "react";
 import { Search, List, BarChart3, Bookmark, Clock } from "lucide-react";
 
 const menuItems = [
-  { path: "/", label: "Search", icon: Search },
-  { path: "/results", label: "Results", icon: List },
   { path: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { path: "/search", label: "Search", icon: Search },
   { path: "/saved", label: "Saved Leads", icon: Bookmark },
+  { path: "/results", label: "Results", icon: List },
   { path: "/history", label: "History", icon: Clock },
 ];
 
