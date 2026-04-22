@@ -1,71 +1,64 @@
-import React, { useState } from "react";
-import Container from "../components/layout/Container";
-import Input from "../components/ui/Input";
-import Button from "../components/ui/Button";
-import Spinner from "../components/ui/Spinner";
-import LeadsTable from "../components/tables/LeadsTable";
-import RoleFilter from "../components/filters/RoleFilter";
-import EmptyState from "../components/feedback/EmptyState";
-import ErrorMessage from "../components/feedback/ErrorMessage";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Search as SearchIcon, Zap } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 
-export default function Search() {
+export default function SearchPage() {
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   const search = useLeadStore((s) => s.search);
-  const leads = useLeadStore((s) => s.leads);
-  const loading = useLeadStore((s) => s.loading);
-  const error = useLeadStore((s) => s.error);
-  const roleFilter = useLeadStore((s) => s.roleFilter);
-
-  const filtered = roleFilter ? leads.filter((l) => l.role?.toLowerCase() === roleFilter.toLowerCase()) : leads;
-
-  async function onSearch(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!query) return;
+  
+  const onSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setLoading(true);
     await search(query);
-  }
+    setLoading(false);
+    navigate("/results");
+  };
 
   return (
-    <Container>
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-xl shadow p-8">
-          <h1 className="text-2xl font-semibold mb-4">Lead Finder</h1>
-          <form onSubmit={onSearch} className="flex gap-3 items-start">
-            <Input placeholder="Enter company domain (e.g. tesla.com)" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <div className="flex flex-col gap-2">
-              <Button type="submit">Search</Button>
-              <RoleFilter />
+    <div>
+      <div className="search-hero" style={{ padding: "10px 0 32px" }}>
+        <div className="hero-pill">
+          <Zap size={12} /> AI-Powered Lead Discovery
+        </div>
+        <div className="hero-title">
+          Find <span className="grad">Decision Makers</span><br />at any company
+        </div>
+        <div className="hero-sub">
+          Discover CEOs, CTOs, HR leads, and more. Enter a company domain to instantly surface verified contacts.
+        </div>
+
+        <div className="search-box" style={{ padding: "48px", height: "400px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div className="search-label">Company Domain</div>
+          <form onSubmit={onSearch}>
+            <div className="search-input-wrap">
+              <SearchIcon className="search-input-icon" size={16} />
+              <input
+                className="search-input"
+                placeholder="e.g. tesla.com, stripe.com"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
             </div>
+            <button
+              type="submit"
+              className="btn btn-primary btn-xl"
+              disabled={loading || !query.trim()}
+            >
+              {loading ? (
+                <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2, margin: 0 }} /> Searching...</>
+              ) : (
+                <><SearchIcon size={16} /> Search Leads</>
+              )}
+            </button>
           </form>
         </div>
 
-        <div className="mt-6">
-          {loading && (
-            <div className="bg-white rounded-xl shadow p-6 flex items-center gap-3">
-              <Spinner size={20} />
-              <span>Searching...</span>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-4">
-              <ErrorMessage message={error} />
-            </div>
-          )}
-
-          {!loading && !error && leads.length === 0 && (
-            <div className="mt-4">
-              <EmptyState title="No results" subtitle="Try another domain or check spelling." />
-            </div>
-          )}
-
-          {!loading && !error && leads.length > 0 && (
-            <div className="mt-4">
-              <LeadsTable leads={filtered} />
-            </div>
-          )}
-        </div>
+        
       </div>
-    </Container>
+    </div>
   );
 }
