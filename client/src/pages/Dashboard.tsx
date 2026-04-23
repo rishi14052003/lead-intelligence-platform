@@ -14,7 +14,7 @@ function StatCard({
   style,
   valueClassName = "",
   labelClassName = "",
-  iconSize = 16
+  iconSize = 20
 }: { 
   label: string; 
   value: string; 
@@ -61,15 +61,17 @@ function Card({ title, extra, children, style }: { title?: string; extra?: any; 
 function EmptyState({ 
   icon: IconComp = Search, 
   title, 
-  subtitle 
+  subtitle,
+  iconSize = 20
 }: { 
   icon?: LucideIcon; 
   title: string; 
   subtitle: string; 
+  iconSize?: number;
 }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon">{IconComp && <IconComp size={20} />}</div>
+      <div className="empty-icon">{IconComp && <IconComp size={iconSize} />}</div>
       <div className="empty-title">{title}</div>
       <div className="empty-sub">{subtitle}</div>
     </div>
@@ -146,12 +148,12 @@ export default function Dashboard() {
       <div className="row" style={{ display: 'flex', gap: '14px' }}>
         <div className="col-6" style={{ flex: 1 }}>
           <Card title="Recent Activity" extra={<button className="btn btn-ghost btn-sm">View All</button>} style={{ height: '100%' }}>
-            <EmptyState icon={Clock} title="No recent activity" subtitle="Your recent searches and lead activities will appear here." />
+            <EmptyState icon={Clock} title="No recent activity" subtitle="Your recent searches and lead activities will appear here." iconSize={24} />
           </Card>
         </div>
         <div className="col-6" style={{ flex: 1 }}>
           <Card title="Top Companies" extra={<button className="btn btn-ghost btn-sm">View All</button>} style={{ height: '100%' }}>
-            <EmptyState icon={Grid} title="No data yet" subtitle="Companies with most leads will appear here." />
+            <EmptyState icon={Grid} title="No data yet" subtitle="Companies with most leads will appear here." iconSize={24} />
           </Card>
         </div>
       </div>
@@ -167,7 +169,7 @@ export default function Dashboard() {
         </div>
         <div className="card-body">
           <div className="chart-placeholder">
-            <BarChart3 size={24} />
+            <BarChart3 size={28} />
             <span>Start searching for leads to see performance metrics</span>
           </div>
         </div>

@@ -27,7 +27,7 @@ function StatCard({
           {meta && <div className="stat-meta">{meta}</div>}
         </div>
         <div className={`stat-icon ${iconVariant}`}>
-          {IconComp && <IconComp size={16} />}
+          {IconComp && <IconComp size={19} />}
         </div>
       </div>
     </div>
@@ -91,11 +91,11 @@ export default function History() {
           <div className="card" style={{ marginBottom: 14, height: "514px" }}>
             <div className="card-header">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Clock size={16} />
+                <Clock size={19} />
                 <span className="card-title">Recent Searches</span>
               </div>
               <button className="btn btn-ghost btn-sm">
-                <Filter size={12} /> Filter
+                <Filter size={15} /> Filter
               </button>
             </div>
             <div className="card-body">
@@ -111,7 +111,7 @@ export default function History() {
                     <div key={h.id} className="history-item" onClick={() => { navigate("/results"); toggleHistorySelection(i); }} style={{ cursor: "pointer" }}>
                       <div className="history-left">
                         <div className="history-icon-wrapper">
-                          <Search size={14} />
+                          <Search size={19} />
                         </div>
                         <div className="history-content">
                           <div className="history-domain">{h.domain}</div>
@@ -174,7 +174,7 @@ export default function History() {
               <div className="tips-list">
                 <div className="tip-item">
                   <div className="tip-icon-wrapper" style={{ background: "rgba(108,99,255,0.15)", color: "var(--accent2)" }}>
-                    <Search size={14} />
+                    <Search size={19} />
                   </div>
                   <div className="tip-content">
                     <div className="tip-title">Be Specific</div>
@@ -183,7 +183,7 @@ export default function History() {
                 </div>
                 <div className="tip-item">
                   <div className="tip-icon-wrapper" style={{ background: "rgba(16,185,129,0.15)", color: "var(--green)" }}>
-                    <Bookmark size={14} />
+                    <Bookmark size={19} />
                   </div>
                   <div className="tip-content">
                     <div className="tip-title">Save Often</div>
@@ -192,7 +192,7 @@ export default function History() {
                 </div>
                 <div className="tip-item">
                   <div className="tip-icon-wrapper" style={{ background: "rgba(245,158,11,0.15)", color: "var(--yellow)" }}>
-                    <Clock size={14} />
+                    <Clock size={19} />
                   </div>
                   <div className="tip-content">
                     <div className="tip-title">Follow Up</div>

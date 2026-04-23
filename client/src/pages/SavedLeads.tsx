@@ -26,7 +26,7 @@ function StatCard({
           {meta && <div className="stat-meta">{meta}</div>}
         </div>
         <div className={`stat-icon ${iconVariant}`}>
-          {IconComp && <IconComp size={16} />}
+          {IconComp && <IconComp size={20} />}
         </div>
       </div>
     </div>
@@ -88,10 +88,10 @@ export default function SavedLeads() {
 
       <div className="card" style={{ height: "600px" }}>
         <div className="card-header">
-          <span className="card-title">Your Saved Leads · <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: 13 }}>{leads.length} saved</span></span>
+          <span className="card-title">Your Saved Leads · <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: 16 }}>{leads.length} saved</span></span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-ghost btn-sm"><Download size={12} /> Export</button>
-            <button className="btn btn-danger btn-sm"><Trash size={12} /> Clear All</button>
+            <button className="btn btn-secondary btn-sm"><Download size={18} /> Export</button>
+            <button className="btn btn-danger btn-sm"><Trash size={18} /> Clear All</button>
           </div>
         </div>
         {leads.length > 0 ? (
@@ -138,8 +138,8 @@ export default function SavedLeads() {
                               flexShrink: 0
                             }} />
                           )}
-                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={12} /></button>
-                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={12} /></button>
+                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={18} /></button>
+                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={18} /></button>
                         </div>
                       </td>
                     </tr>

@@ -113,7 +113,7 @@ export default function Results() {
         <div className="card-header">
           <span className="card-title">Lead Results</span>
           <div className="filter-pills">
-            <Filter size={12} />
+            <Filter size={16} />
             {roles.map(r => (
               <button key={r} className={`filter-pill ${filter === r ? "active" : ""}`} onClick={() => setFilter(r)}>{r}</button>
             ))}
@@ -163,8 +163,8 @@ export default function Results() {
                               flexShrink: 0
                             }} />
                           )}
-                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={12} /></button>
-                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={12} /></button>
+                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={24} /></button>
+                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={24} /></button>
                         </div>
                       </td>
                     </tr>
