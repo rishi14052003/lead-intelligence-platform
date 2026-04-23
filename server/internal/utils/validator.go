@@ -1,1 +1,146 @@
 package utils
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+// ValidateEmail validates an email address
+func ValidateEmail(email string) bool {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return false
+	}
+
+	// Simple email validation
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
+}
+
+// ValidateDomain validates a domain
+func ValidateDomain(domain string) bool {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return false
+	}
+
+	// Remove protocol if present
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimPrefix(domain, "https://")
+	domain = strings.TrimPrefix(domain, "www.")
+
+	// Check if it contains at least one dot
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+
+	// Check for valid characters
+	validDomainRegex := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9](\.[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])*\.[a-zA-Z]{2,}$`)
+	return validDomainRegex.MatchString(domain)
+}
+
+// ValidateName validates a person's name
+func ValidateName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+
+	// Name should have at least 2 characters
+	if len(name) < 2 {
+		return false
+	}
+
+	// Name should not exceed 100 characters
+	if len(name) > 100 {
+		return false
+	}
+
+	// Check for valid characters (letters, spaces, hyphens, apostrophes)
+	validNameRegex := regexp.MustCompile(`^[a-zA-Z\s\-']+$`)
+	return validNameRegex.MatchString(name)
+}
+
+// ValidateRole validates a role
+func ValidateRole(role string) bool {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return false
+	}
+
+	// Role should have at least 2 characters
+	if len(role) < 2 {
+		return false
+	}
+
+	// Role should not exceed 50 characters
+	if len(role) > 50 {
+		return false
+	}
+
+	return true
+}
+
+// ValidateURL validates a URL
+func ValidateURL(url string) bool {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return false
+	}
+
+	// Check if it starts with http:// or https://
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return false
+	}
+
+	// Check for valid URL characters
+	validURLRegex := regexp.MustCompile(`^https?://[^\s]+$`)
+	return validURLRegex.MatchString(url)
+}
+
+// ValidateScore validates a score
+func ValidateScore(score int) bool {
+	return score >= 0 && score <= 100
+}
+
+// ValidateQuery validates a search query
+func ValidateQuery(query string) (bool, string) {
+	query = strings.TrimSpace(query)
+
+	if query == "" {
+		return false, "Query cannot be empty"
+	}
+
+	if len(query) < 3 {
+		return false, "Query must be at least 3 characters long"
+	}
+
+	if len(query) > 255 {
+		return false, "Query must not exceed 255 characters"
+	}
+
+	// If it looks like a domain, validate it
+	if strings.Contains(query, ".") {
+		if !ValidateDomain(query) {
+			return false, fmt.Sprintf("Invalid domain: %s", query)
+		}
+	}
+
+	return true, ""
+}
+
+// SanitizeInput removes potentially harmful characters
+func SanitizeInput(input string) string {
+	// Remove leading/trailing whitespace
+	input = strings.TrimSpace(input)
+
+	// Remove null bytes
+	input = strings.ReplaceAll(input, "\x00", "")
+
+	// Remove control characters
+	validInputRegex := regexp.MustCompile(`[\x00-\x1f\x7f-\x9f]`)
+	input = validInputRegex.ReplaceAllString(input, "")
+
+	return input
+}
