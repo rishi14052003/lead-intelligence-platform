@@ -25,7 +25,7 @@ body {
 
 /* Theme-aware custom classes */
 .btn-primary {
-  background: linear-gradient(to right, var(--header-primary), var(--accent-primary));
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   color: white;
   font-weight: 600;
   padding: 0.75rem 1.5rem;
@@ -36,66 +36,67 @@ body {
 }
 
 .btn-primary:hover {
-  background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
   box-shadow: 0 20px 25px -5px var(--shadow), 0 10px 10px -5px var(--shadow);
   transform: scale(1.05);
 }
 
 [data-theme="dark"] .btn-primary:hover {
-  background: linear-gradient(to right, var(--accent-secondary), var(--accent-primary));
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
 }
 
 .btn-secondary {
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  background: var(--surface2);
+  color: var(--text);
   font-weight: 500;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  border: 2px solid var(--border-primary);
-  box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
+  border: 1px solid var(--border);
+  box-shadow: none;
   transition: all 0.2s;
   transform: scale(1);
 }
 
 .btn-secondary:hover {
-  background: var(--bg-secondary);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  box-shadow: 0 10px 15px -3px var(--shadow), 0 4px 6px -2px var(--shadow);
-  transform: scale(1.05);
+  background: var(--surface3);
+  border-color: var(--border2);
+  color: var(--text);
+  box-shadow: none;
+  transform: scale(1.02);
 }
 
 .btn-danger {
-  background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
-  color: white;
+  background: rgba(239,68,68,0.1);
+  color: var(--red);
   font-weight: 500;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  box-shadow: 0 4px 6px -1px var(--shadow), 0 2px 4px -1px var(--shadow);
+  border: 1px solid rgba(239,68,68,0.2);
+  box-shadow: none;
   transition: all 0.2s;
   transform: scale(1);
 }
 
 .btn-danger:hover {
-  background: linear-gradient(to right, var(--accent-secondary), var(--accent-primary));
-  box-shadow: 0 10px 15px -3px var(--shadow), 0 4px 6px -2px var(--shadow);
-  transform: scale(1.05);
+  background: rgba(239,68,68,0.18);
+  box-shadow: none;
+  transform: scale(1.02);
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text2);
   font-weight: 500;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  border: transparent;
+  border: 1px solid transparent;
   transition: all 0.2s;
 }
 
 .btn-ghost:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-primary);
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .card-gradient {
