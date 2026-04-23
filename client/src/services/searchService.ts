@@ -1,52 +1,37 @@
+import api from "./api";
 
 export interface Lead {
+  id?: string;
   name: string;
   role: string;
   email?: string;
   linkedin?: string;
   score?: number;
+  company?: string;
+  createdAt?: string;
 }
 
-const mockLeads: Lead[] = [
-  {
-    name: "John Smith",
-    role: "CEO",
-    email: "john.smith@tesla.com",
-    linkedin: "https://linkedin.com/in/johnsmith",
-    score: 95
-  },
-  {
-    name: "Sarah Johnson",
-    role: "CTO",
-    email: "sarah.j@tesla.com",
-    linkedin: "https://linkedin.com/in/sarahjohnson",
-    score: 88
-  },
-  {
-    name: "Michael Chen",
-    role: "VP of Sales",
-    email: "m.chen@tesla.com",
-    linkedin: "https://linkedin.com/in/michaelchen",
-    score: 92
-  },
-  {
-    name: "Emily Davis",
-    role: "Head of HR",
-    email: "emily.d@tesla.com",
-    linkedin: "https://linkedin.com/in/emilydavis",
-    score: 85
-  },
-  {
-    name: "Robert Wilson",
-    role: "Engineering Manager",
-    email: "r.wilson@tesla.com",
-    linkedin: "https://linkedin.com/in/robertwilson",
-    score: 90
+export async function searchLeads(query: string): Promise<Lead[]> {
+  try {
+    const response = await api.post("/search", { query });
+    
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    throw new Error(response.data.message || "Search failed");
+  } catch (error: any) {
+    console.error("Search error:", error);
+    throw error;
   }
-];
+}
 
-export async function searchLeads(_query: string) {
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  return mockLeads;
+export async function getSearchHistory() {
+  try {
+    const response = await api.get("/search-history");
+    return response.data.data || [];
+  } catch (error: any) {
+    console.error("Error fetching search history:", error);
+    return [];
+  }
 }
