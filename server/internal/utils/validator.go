@@ -104,7 +104,7 @@ func ValidateScore(score int) bool {
 	return score >= 0 && score <= 100
 }
 
-// ValidateQuery validates a search query
+// ValidateQuery validates a search query (company name or domain)
 func ValidateQuery(query string) (bool, string) {
 	query = strings.TrimSpace(query)
 
@@ -112,8 +112,8 @@ func ValidateQuery(query string) (bool, string) {
 		return false, "Query cannot be empty"
 	}
 
-	if len(query) < 3 {
-		return false, "Query must be at least 3 characters long"
+	if len(query) < 2 {
+		return false, "Query must be at least 2 characters long"
 	}
 
 	if len(query) > 255 {
@@ -124,6 +124,11 @@ func ValidateQuery(query string) (bool, string) {
 	if strings.Contains(query, ".") {
 		if !ValidateDomain(query) {
 			return false, fmt.Sprintf("Invalid domain: %s", query)
+		}
+	} else {
+		// If it's a company name, validate it
+		if !ValidateName(query) {
+			return false, fmt.Sprintf("Invalid company name: %s", query)
 		}
 	}
 

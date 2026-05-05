@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Clock, TrendingUp, Filter, Bookmark } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import ExportDropdown from "../components/ExportDropdown";
+import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
 function StatCard({ 
   label, 
@@ -68,6 +70,29 @@ export default function History() {
     setSelectedHistory(newSelected);
   };
 
+  const handleExport = (format: 'pdf' | 'excel' | 'word') => {
+    const exportFilename = `search-history-${new Date().toISOString().split('T')[0]}`;
+    
+    // Transform history data for export
+    const exportData = history.map((h: any) => ({
+      domain: h.domain || '-',
+      date: h.date || '-',
+      leadsFound: h.leadsFound || 0,
+    }));
+    
+    switch (format) {
+      case 'excel':
+        exportToExcel(exportData, exportFilename, 'Search History');
+        break;
+      case 'pdf':
+        exportToPDF(exportData, exportFilename, 'Search History Export');
+        break;
+      case 'word':
+        exportToWord(exportData, exportFilename, 'Search History Export');
+        break;
+    }
+  };
+
   return (
     <div>
       {/* Page Header */}
@@ -94,9 +119,12 @@ export default function History() {
                 <Clock size={19} />
                 <span className="card-title">Recent Searches</span>
               </div>
-              <button className="btn btn-ghost btn-sm">
-                <Filter size={15} /> Filter
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <ExportDropdown onExport={handleExport} disabled={history.length === 0} />
+                <button className="btn btn-ghost btn-sm">
+                  <Filter size={15} /> Filter
+                </button>
+              </div>
             </div>
             <div className="card-body">
               {history.length === 0 ? (

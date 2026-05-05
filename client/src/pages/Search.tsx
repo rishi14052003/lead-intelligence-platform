@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search as SearchIcon, Zap, ArrowRight, Globe, Users, TrendingUp, Shield } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 
-const EXAMPLE_DOMAINS = ["stripe.com", "openai.com", "notion.so", "vercel.com", "figma.com"];
+const EXAMPLE_DOMAINS = ["Stripe", "OpenAI", "Notion", "Vercel", "Figma"];
 
 const FEATURES = [
   {
@@ -46,7 +46,7 @@ export default function SearchPage() {
     e.preventDefault();
     const trimmed = query.trim();
     if (!trimmed) {
-      setError("Enter a company domain to get started.");
+      setError("Enter a company name to get started.");
       return;
     }
     setError("");
@@ -86,7 +86,7 @@ export default function SearchPage() {
         </h1>
 
         <p className="search-subline">
-          Enter any company domain. We'll surface CEOs, CTOs, and key executives —
+          Enter any company name. We'll surface CEOs, CTOs, and key executives —
           complete with emails, LinkedIn profiles, and relevance scores.
         </p>
 
@@ -100,7 +100,7 @@ export default function SearchPage() {
               <input
                 ref={inputRef}
                 className="search-field-input"
-                placeholder="e.g. stripe.com, openai.com"
+                placeholder="e.g. Stripe, OpenAI, Notion"
                 value={query}
                 onChange={(e) => { setQuery(e.target.value); setError(""); }}
                 onFocus={() => setFocused(true)}

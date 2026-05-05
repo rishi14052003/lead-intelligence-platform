@@ -224,3 +224,28 @@ func ExtractNameFromEmail(email string) string {
 
 	return name
 }
+
+// CompanyNameToDomain converts a company name to a domain
+// e.g., "Stripe" -> "stripe.com", "OpenAI" -> "openai.com"
+func CompanyNameToDomain(companyName string) string {
+	// Convert to lowercase
+	companyName = strings.ToLower(companyName)
+	
+	// Remove spaces and special characters
+	reg := regexp.MustCompile(`[^a-z0-9]`)
+	companyName = reg.ReplaceAllString(companyName, "")
+	
+	// Add .com TLD
+	return companyName + ".com"
+}
+
+// FormatDomain ensures domain has proper format
+func FormatDomain(input string) string {
+	// If it's already a domain, return as is
+	if strings.Contains(input, ".") {
+		return ExtractDomain(input)
+	}
+	
+	// Otherwise, treat it as a company name and convert
+	return CompanyNameToDomain(input)
+}

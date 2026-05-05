@@ -53,7 +53,9 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 
 	// Sanitize input
 	query = utils.SanitizeInput(query)
-	domain := utils.ExtractDomain(query)
+
+	// Convert company name to domain if needed
+	domain := utils.FormatDomain(query)
 
 	log.Printf("Starting search for domain: %s", domain)
 

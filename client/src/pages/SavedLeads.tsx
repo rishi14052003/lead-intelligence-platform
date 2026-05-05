@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { Bookmark, Mail, Link, Star, Download, Trash } from "lucide-react";
+import { Bookmark, Mail, Link, Star, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
+import ExportDropdown from "../components/ExportDropdown";
+import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
 function StatCard({ 
   label, 
@@ -81,6 +83,22 @@ export default function SavedLeads() {
     }
   };
 
+  const handleExport = (format: 'pdf' | 'excel' | 'word') => {
+    const exportFilename = `saved-leads-${new Date().toISOString().split('T')[0]}`;
+    
+    switch (format) {
+      case 'excel':
+        exportToExcel(leads, exportFilename);
+        break;
+      case 'pdf':
+        exportToPDF(leads, exportFilename);
+        break;
+      case 'word':
+        exportToWord(leads, exportFilename);
+        break;
+    }
+  };
+
   return (
     <div>
       {/* Page Header */}
@@ -101,7 +119,7 @@ export default function SavedLeads() {
         <div className="card-header">
           <span className="card-title">Your Saved Leads · <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: 16 }}>{leads.length} saved</span></span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary btn-sm"><Download size={18} /> Export</button>
+            <ExportDropdown onExport={handleExport} disabled={loading || leads.length === 0} />
             <button className="btn btn-danger btn-sm" onClick={handleClearAll} disabled={loading || leads.length === 0}><Trash size={18} /> Clear All</button>
           </div>
         </div>
@@ -150,7 +168,6 @@ export default function SavedLeads() {
                             }} />
                           )}
                           <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={18} /></button>
-                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={18} /></button>
                         </div>
                       </td>
                     </tr>
