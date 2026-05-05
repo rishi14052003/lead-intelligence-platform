@@ -16,11 +16,29 @@ import (
 	"lead-finder/internal/database"
 )
 
+// Global Apollo API key - set from config
+var globalApolloAPIKey string
+
+// GetGlobalApolloAPIKey returns the configured Apollo API key
+func GetGlobalApolloAPIKey() string {
+	return globalApolloAPIKey
+}
+
 func main() {
 	// Load configuration
 	cfg := configs.LoadConfig()
 	log.Printf("Starting server in %s mode", cfg.Environment)
 	log.Printf("Client URL: %s", cfg.ClientURL)
+
+	// Set global Apollo API key
+	globalApolloAPIKey = cfg.ApolloAPIKey
+	api.SetApolloAPIKey(cfg.ApolloAPIKey)
+
+	if globalApolloAPIKey != "" {
+		log.Println("✓ Apollo.io API key configured")
+	} else {
+		log.Println("⚠️ Apollo API key not set - set APOLLO_API_KEY environment variable to enable")
+	}
 
 	// Initialize database
 	db, err := database.Init(cfg.MongoURI, cfg.DBName)

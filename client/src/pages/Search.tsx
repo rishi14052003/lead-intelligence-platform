@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
+import SearchProgress from "../components/feedback/SearchProgress";
 
 const EXAMPLE_DOMAINS = ["Stripe", "OpenAI", "Notion", "Vercel", "Figma", "Linear"];
 
@@ -88,6 +89,9 @@ export default function SearchPage() {
 
   return (
     <div className={`search-page-v2 ${mounted ? "mounted" : ""}`}>
+      {/* Loading Progress Overlay */}
+      {loading && <SearchProgress />}
+
       <div className="search-orb search-orb-1" />
       <div className="search-orb search-orb-2" />
       <div className="search-orb search-orb-3" />

@@ -11,6 +11,7 @@ type Lead struct {
 	Name       string             `bson:"name" json:"name"`
 	Role       string             `bson:"role" json:"role"`
 	Email      string             `bson:"email" json:"email"`
+	Phone      string             `bson:"phone" json:"phone"`
 	LinkedIn   string             `bson:"linkedin" json:"linkedin"`
 	Score      int                `bson:"score" json:"score"`
 	Company    string             `bson:"company" json:"company"`

@@ -5,6 +5,7 @@ import { useLeadStore } from "../store/leadStore";
 import { saveLeads } from "../services/leadService";
 import Dialog from "../components/Dialog";
 import ExportDropdown from "../components/ExportDropdown";
+import SearchProgress from "../components/feedback/SearchProgress";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
 function StatCard({ 
@@ -163,6 +164,9 @@ export default function Results() {
 
   return (
     <div>
+      {/* Loading Progress */}
+      {loading && <SearchProgress />}
+
       {/* Page Header */}
       <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>

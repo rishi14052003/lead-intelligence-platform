@@ -1,4 +1,4 @@
-import create from "zustand";
+import { create } from "zustand";
 import { searchLeads } from "../services/searchService";
 import { getSavedLeads, clearAllLeads } from "../services/leadService";
 import type { Lead } from "../services/searchService";

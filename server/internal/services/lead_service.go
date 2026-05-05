@@ -20,6 +20,7 @@ import (
 // LeadService orchestrates lead finding and enrichment
 type LeadService struct {
 	db             *database.Database
+	apolloService  *ApolloService
 	webScraper     *scraper.WebScraper
 	googleScraper  *scraper.GoogleScraper
 	linkedinParser *scraper.LinkedInParser
@@ -37,11 +38,17 @@ func NewLeadService(db *database.Database) *LeadService {
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
+		apolloService:  nil, // Will be initialized with API key in main
 		maxLeads:       10,
 	}
 }
 
-// SearchAndEnrichLeads performs a complete search and enrichment workflow
+// SetApolloService sets the Apollo service
+func (ls *LeadService) SetApolloService(apollo *ApolloService) {
+	ls.apolloService = apollo
+}
+
+// SearchAndEnrichLeads performs a complete search and enrichment workflow using Apollo API
 func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -55,18 +62,16 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 	// Sanitize input
 	query = utils.SanitizeInput(query)
 
-	// Extract company name from query (remove city if present)
-	// Split by space and take first part as company name
+	// Extract company name from query
 	parts := strings.Fields(query)
 	var companyName string
 	if len(parts) > 0 {
 		companyName = parts[0]
 	}
 
-	// Convert company name to domain
 	domain := utils.FormatDomain(companyName)
 
-	log.Printf("Starting search for domain: %s", domain)
+	log.Printf("🔎 Starting search for: %s (domain: %s)", companyName, domain)
 
 	// Create search record
 	search := &models.Search{
@@ -80,22 +85,47 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		log.Printf("Error saving search: %v", err)
 	}
 
-	// Collect all leads data
 	var leads []models.Lead
+
+	// Use Apollo API if available
+	if ls.apolloService != nil {
+		log.Println("📡 Searching Apollo.io API...")
+		apolloLeads, err := ls.apolloService.SearchLeads(companyName)
+		if err != nil {
+			log.Printf("⚠️ Apollo API error: %v - falling back to legacy scraping", err)
+			// Continue with legacy scraping as fallback
+		} else if len(apolloLeads) > 0 {
+			log.Printf("✓ Apollo API returned %d leads", len(apolloLeads))
+
+			// Add SearchID to leads
+			for i := range apolloLeads {
+				apolloLeads[i].SearchID = searchID.(primitive.ObjectID)
+			}
+
+			leads = apolloLeads
+
+			// Update search with results
+			ls.updateSearchResults(ctx, searchID, len(leads))
+			log.Printf("✅ Search completed via Apollo. Found %d leads", len(leads))
+			return leads, nil
+		}
+	}
+
+	// Legacy scraping fallback if Apollo not available or returned no results
+	log.Println("📋 Using legacy scraper methods...")
 	leadsMap := make(map[string]*models.Lead)
 
-	// Step 1: Scrape website for emails and names
-	log.Println("Step 1: Scraping website...")
+	// Step 1: Scrape website
+	log.Println("  Step 1: Scraping website...")
 	websiteEmails, _ := ls.webScraper.ScrapeEmails(domain)
 	websiteNames, _ := ls.webScraper.ExtractNames(domain)
 	contactPageEmails, _ := ls.webScraper.ScrapeContactPage(domain)
 
-	// Combine emails
 	allEmails := append(websiteEmails, contactPageEmails...)
 	allEmails = deduplicateStrings(allEmails)
 
-	// Step 2: Search for executive information
-	log.Println("Step 2: Searching for executives...")
+	// Step 2: Search for executives
+	log.Println("  Step 2: Searching for executives...")
 	ceoNames, _ := ls.googleScraper.SearchCEO(domain)
 	ctoNames, _ := ls.googleScraper.SearchCTO(domain)
 	leadershipNames, _ := ls.googleScraper.SearchLeadership(domain)
@@ -139,7 +169,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			break
 		}
 
-		// Try to find email for this name
 		email := ls.findEmailForName(name, allEmails)
 
 		lead := &models.Lead{
@@ -152,7 +181,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			UpdatedAt:  time.Now(),
 		}
 
-		// Use name as key if no email
 		key := email
 		if key == "" {
 			key = name
@@ -163,13 +191,11 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		}
 	}
 
-	// Step 5: Enrich leads with LinkedIn profiles
-	log.Println("Step 3: Enriching with LinkedIn profiles...")
+	// Step 5: Enrich with LinkedIn
+	log.Println("  Step 3: Enriching with LinkedIn profiles...")
 	for _, lead := range leadsMap {
-		// Search for LinkedIn profile
 		linkedinProfiles, _ := ls.linkedinParser.SearchProfiles(domain, lead.Role)
 		if len(linkedinProfiles) > 0 {
-			// Try to match with name
 			for _, profile := range linkedinProfiles {
 				if ls.linkedinParser.MatchNameWithLinkedIn(lead.Name, profile) {
 					lead.LinkedIn = profile
@@ -178,25 +204,18 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			}
 		}
 
-		// Assign role based on email or name patterns
 		lead.Role = ls.inferRole(lead)
-
-		// Calculate score
 		lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", lead.Email != "")
-
 		leads = append(leads, *lead)
 	}
 
-	// Limit results
 	if len(leads) > ls.maxLeads {
 		leads = leads[:ls.maxLeads]
 	}
 
-	// Update search with results count
 	ls.updateSearchResults(ctx, searchID, len(leads))
 
-	log.Printf("Search completed. Found %d leads", len(leads))
-
+	log.Printf("✅ Search completed via legacy scraper. Found %d leads", len(leads))
 	return leads, nil
 }
 

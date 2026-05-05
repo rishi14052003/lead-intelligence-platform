@@ -259,7 +259,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export default function AppRoutes() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
