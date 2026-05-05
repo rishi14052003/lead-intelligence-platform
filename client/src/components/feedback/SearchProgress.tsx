@@ -1,10 +1,10 @@
 export default function SearchProgress() {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-sm w-full mx-4">
         {/* Circular Progress Track */}
         <div className="flex justify-center mb-8">
-          <div className="relative w-24 h-24">
+          <div className="relative w-16 h-16">
             {/* Background circle */}
             <svg className="w-full h-full" viewBox="0 0 100 100">
               <circle

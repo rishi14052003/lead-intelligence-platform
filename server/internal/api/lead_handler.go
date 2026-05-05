@@ -11,6 +11,9 @@ import (
 	"lead-finder/internal/database"
 	"lead-finder/internal/models"
 	"lead-finder/internal/services"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type LeadsRequest struct {
@@ -119,7 +122,27 @@ func DeleteLeadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete specific lead by ID
-	// TODO: Implement single lead deletion
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"success": "false",
+			"message": "Invalid lead ID",
+		})
+		return
+	}
+
+	collection := db.Instance.Collection("leads")
+	_, err = collection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"success": "false",
+			"message": "Failed to delete lead",
+		})
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,

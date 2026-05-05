@@ -88,9 +88,11 @@ export default function SearchPage() {
   };
 
   return (
-    <div className={`search-page-v2 ${mounted ? "mounted" : ""}`}>
-      {/* Loading Progress Overlay */}
+    <>
+      {/* Loading Progress Overlay - outside blur container */}
       {loading && <SearchProgress />}
+
+      <div className={`search-page-v2 ${mounted ? "mounted" : ""} ${loading ? "blur-background" : ""}`}>
 
       <div className="search-orb search-orb-1" />
       <div className="search-orb search-orb-2" />
@@ -284,5 +286,6 @@ export default function SearchPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

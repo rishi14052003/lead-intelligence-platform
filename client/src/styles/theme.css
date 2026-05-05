@@ -1441,6 +1441,11 @@ tbody tr:hover td { background: rgba(255,255,255,0.02); }
   align-items: center;
 }
 
+.search-page-v2.blur-background {
+  filter: blur(8px);
+  pointer-events: none;
+}
+
 /* ── Ambient orbs ── */
 .search-orb {
   position: fixed;

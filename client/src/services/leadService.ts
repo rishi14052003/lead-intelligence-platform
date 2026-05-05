@@ -22,6 +22,17 @@ export async function getSavedLeads(): Promise<Lead[]> {
 	}
 }
 
+export async function getSavedLeadIds(): Promise<string[]> {
+	try {
+		const response = await api.get<{ data: Lead[], count: number }>("/leads");
+		const leads = response.data.data || [];
+		return leads.map(l => l.id || l.email || l.name).filter(Boolean);
+	} catch (error) {
+		console.error("Error fetching saved lead IDs:", error);
+		return [];
+	}
+}
+
 export async function exportLeads(): Promise<void> {
 	try {
 		const response = await api.get("/export", {

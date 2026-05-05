@@ -117,9 +117,15 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 
 	// Step 1: Scrape website
 	log.Println("  Step 1: Scraping website...")
-	websiteEmails, _ := ls.webScraper.ScrapeEmails(domain)
-	websiteNames, _ := ls.webScraper.ExtractNames(domain)
-	contactPageEmails, _ := ls.webScraper.ScrapeContactPage(domain)
+	websiteEmails, scrapedURL, _ := ls.webScraper.ScrapeEmails(domain)
+	websiteNames, _, _ := ls.webScraper.ExtractNames(domain)
+	contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
+
+	// Use scraped URL if available, otherwise generate one
+	companyURL := scrapedURL
+	if companyURL == "" {
+		companyURL = fmt.Sprintf("https://%s", utils.FormatDomain(domain))
+	}
 
 	allEmails := append(websiteEmails, contactPageEmails...)
 	allEmails = deduplicateStrings(allEmails)
@@ -148,7 +154,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		lead := &models.Lead{
 			Email:      email,
 			Company:    utils.FormatCompanyName(domain),
-			CompanyURL: fmt.Sprintf("https://%s", utils.FormatDomain(domain)),
+			CompanyURL: companyURL,
 			SearchID:   searchID.(primitive.ObjectID),
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
@@ -175,7 +181,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			Name:       name,
 			Email:      email,
 			Company:    utils.FormatCompanyName(domain),
-			CompanyURL: fmt.Sprintf("https://%s", utils.FormatDomain(domain)),
+			CompanyURL: companyURL,
 			SearchID:   searchID.(primitive.ObjectID),
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),

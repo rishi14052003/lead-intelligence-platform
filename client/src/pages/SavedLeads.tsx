@@ -1,10 +1,21 @@
 import { useState, useEffect } from "react";
-import { Bookmark, Mail, Link, Star, Trash } from "lucide-react";
+import { Bookmark, Mail, Link, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import ExportDropdown from "../components/ExportDropdown";
 import Dialog from "../components/Dialog";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
+import { deleteLead } from "../services/leadService";
+
+// Sanitize name to remove code/function-like strings
+function sanitizeName(name: string): string {
+  if (!name) return "Unknown";
+  // Check if name looks like code (contains function, parentheses, etc.)
+  if (name.includes("function") || name.includes("=>") || name.includes("return") || name.length > 100) {
+    return "Unknown";
+  }
+  return name;
+}
 
 function StatCard({ 
   label, 
@@ -47,22 +58,12 @@ function EmptyState({ icon: IconComp = Bookmark, title, subtitle }: { icon?: any
   );
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const cls = score >= 80 ? "badge-green" : score >= 60 ? "badge-yellow" : "badge-red";
-  const fillColor = score >= 80 ? "var(--green)" : score >= 60 ? "var(--yellow)" : "var(--red)";
-  return (
-    <div className="score-wrap">
-      <span className={`badge ${cls}`}>{score}</span>
-      <div className="score-bar-bg">
-        <div className="score-bar-fill" style={{ width: `${score}%`, background: fillColor }} />
-      </div>
-    </div>
-  );
-}
 
 export default function SavedLeads() {
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   const [dialogConfig, setDialogConfig] = useState<{
     title: string;
     message: string;
@@ -71,9 +72,20 @@ export default function SavedLeads() {
   } | null>(null);
   const { leads, loading, fetchSavedLeads, clearAllSavedLeads } = useLeadStore();
 
+  // Calculate pagination
+  const totalPages = Math.ceil(leads.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentLeads = leads.slice(startIndex, endIndex);
+
   useEffect(() => {
     fetchSavedLeads();
   }, [fetchSavedLeads]);
+
+  // Reset to page 1 when leads change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [leads.length]);
 
   const toggleLeadSelection = (index: number) => {
     const newSelected = new Set(selectedLeads);
@@ -92,6 +104,42 @@ export default function SavedLeads() {
       onConfirm: async () => {
         await clearAllSavedLeads();
         setDialogOpen(false);
+      },
+      variant: "danger",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleDeleteLead = (leadId: string, leadName: string) => {
+    setDialogConfig({
+      title: "Remove Saved Lead",
+      message: `Are you sure you want to remove ${leadName} from your saved leads?`,
+      onConfirm: async () => {
+        try {
+          await deleteLead(leadId);
+          await fetchSavedLeads();
+          setDialogOpen(false);
+        } catch (error) {
+          console.error("Error deleting lead:", error);
+        }
+      },
+      variant: "danger",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleUnsaveLead = (leadId: string, leadName: string) => {
+    setDialogConfig({
+      title: "Unsave Lead",
+      message: `Are you sure you want to unsave ${leadName}?`,
+      onConfirm: async () => {
+        try {
+          await deleteLead(leadId);
+          await fetchSavedLeads();
+          setDialogOpen(false);
+        } catch (error) {
+          console.error("Error unsaving lead:", error);
+        }
       },
       variant: "danger",
     });
@@ -123,11 +171,10 @@ export default function SavedLeads() {
       </div>
 
       {/* Stats Grid */}
-      <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
+      <div className="stats-grid stats-3" style={{ marginBottom: 20 }}>
         <StatCard label="Total Saved" value={leads.length.toString()} icon={Bookmark} iconVariant="violet" />
         <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} iconVariant="violet" />
         <StatCard label="LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
-        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Star} iconVariant="violet" />
       </div>
 
       <div className="card" style={{ height: "600px" }}>
@@ -140,23 +187,22 @@ export default function SavedLeads() {
         </div>
         {leads.length > 0 ? (
           <>
-            <div className="table-wrap">
-              <table>
+            <div className="table-wrap" style={{ tableLayout: "fixed" }}>
+              <table style={{ width: "100%" }}>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Role</th>
-                    <th>Email</th>
-                    <th>LinkedIn</th>
-                    <th>Score</th>
-                    <th>Actions</th>
+                    <th style={{ width: "25%" }}>Name</th>
+                    <th style={{ width: "15%" }}>Role</th>
+                    <th style={{ width: "25%" }}>Email</th>
+                    <th style={{ width: "20%" }}>LinkedIn</th>
+                    <th style={{ width: "15%" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((lead, i) => (
+                  {currentLeads.map((lead, i) => (
                     <tr key={i} onClick={() => toggleLeadSelection(i)} style={{ cursor: "pointer" }}>
                       <td>
-                        <div className="lead-name">{lead.name}</div>
+                        <div className="lead-name">{sanitizeName(lead.name)}</div>
                         <div className="lead-role">{lead.company}</div>
                       </td>
                       <td><span className="badge badge-purple">{lead.role}</span></td>
@@ -170,19 +216,27 @@ export default function SavedLeads() {
                           ? <a href={lead.linkedin} className="linkedin-link"><Link size={12} /> Profile</a>
                           : <span className="muted">-</span>}
                       </td>
-                      <td>{typeof lead.score === "number" ? <ScoreBadge score={lead.score} /> : <span className="muted">-</span>}</td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {selectedLeads.has(i) && (
-                            <div style={{ 
-                              width: 8, 
-                              height: 8, 
-                              borderRadius: "50%", 
-                              backgroundColor: "#3b82f6",
-                              flexShrink: 0
-                            }} />
-                          )}
-                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={18} /></button>
+                          <button 
+                            className="btn btn-ghost btn-sm btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUnsaveLead(lead.id || "", sanitizeName(lead.name));
+                            }}
+                            style={{ color: "var(--accent)" }}
+                          >
+                            <Bookmark size={18} fill="currentColor" />
+                          </button>
+                          <button 
+                            className="btn btn-ghost btn-sm btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteLead(lead.id || "", sanitizeName(lead.name));
+                            }}
+                          >
+                            <Trash size={18} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -191,10 +245,22 @@ export default function SavedLeads() {
               </table>
             </div>
             <div className="pagination">
-              <span>Showing {leads.length} of {leads.length} leads</span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button className="btn btn-secondary btn-sm" disabled>Prev</button>
-                <button className="btn btn-secondary btn-sm" disabled>Next</button>
+              <span>Showing {startIndex + 1}-{Math.min(endIndex, leads.length)} of {leads.length} leads</span>
+              <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Prev
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                >
+                  Next
+                </button>
               </div>
             </div>
           </>

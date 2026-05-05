@@ -32,13 +32,13 @@ func NewWebScraper() *WebScraper {
 }
 
 // ScrapeEmails extracts emails from a website
-func (ws *WebScraper) ScrapeEmails(domain string) ([]string, error) {
+func (ws *WebScraper) ScrapeEmails(domain string) ([]string, string, error) {
 	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
 
 	// Get the HTML
-	html, err := ws.fetchHTML(url)
+	finalURL, html, err := ws.fetchHTML(url)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Extract emails from HTML
@@ -52,11 +52,11 @@ func (ws *WebScraper) ScrapeEmails(domain string) ([]string, error) {
 		}
 	}
 
-	return filteredEmails, nil
+	return filteredEmails, finalURL, nil
 }
 
 // ScrapeContactPage looks for contact information on the website
-func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, error) {
+func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, string, error) {
 	baseURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
 
 	// Try common contact page URLs
@@ -70,10 +70,16 @@ func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, error) {
 	}
 
 	var allEmails []string
+	var finalURL string
 	for _, url := range contactURLs {
-		html, err := ws.fetchHTML(url)
+		fetchedURL, html, err := ws.fetchHTML(url)
 		if err != nil {
 			continue
+		}
+
+		// Store the first successful URL
+		if finalURL == "" {
+			finalURL = fetchedURL
 		}
 
 		emails := utils.ExtractEmails(html)
@@ -92,27 +98,27 @@ func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, error) {
 		}
 	}
 
-	return allEmails, nil
+	return allEmails, finalURL, nil
 }
 
 // ExtractNames extracts names from website content
-func (ws *WebScraper) ExtractNames(domain string) ([]string, error) {
+func (ws *WebScraper) ExtractNames(domain string) ([]string, string, error) {
 	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
 
-	html, err := ws.fetchHTML(url)
+	finalURL, html, err := ws.fetchHTML(url)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	names := utils.ExtractNames(html)
-	return names, nil
+	return names, finalURL, nil
 }
 
 // ScrapeCompanyInfo extracts company information
 func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error) {
 	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
 
-	html, err := ws.fetchHTML(url)
+	_, html, err := ws.fetchHTML(url)
 	if err != nil {
 		return nil, err
 	}
@@ -140,27 +146,26 @@ func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error
 	return info, nil
 }
 
-// fetchHTML fetches HTML content from a URL
-func (ws *WebScraper) fetchHTML(url string) (string, error) {
+// fetchHTML fetches HTML content from a URL and returns the final URL after redirects
+func (ws *WebScraper) fetchHTML(url string) (string, string, error) {
 	resp, err := ws.client.Get(url)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch %s: %w", url, err)
+		return "", "", fmt.Errorf("failed to fetch %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status code %d for %s", resp.StatusCode, url)
-	}
+	// Get the final URL after redirects
+	finalURL := resp.Request.URL.String()
 
 	// Limit response body size
 	limitedReader := io.LimitReader(resp.Body, 5*1024*1024) // 5MB limit
 
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return finalURL, "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	return string(body), nil
+	return finalURL, string(body), nil
 }
 
 // Helper function to check if a string is in a slice
