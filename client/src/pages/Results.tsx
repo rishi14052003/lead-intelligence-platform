@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Search, Users, Mail, Link, Bookmark, Download, Filter } from "lucide-react";
+import { Search, Users, Mail, Link, Bookmark, Download, Filter, Globe, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
+import { saveLeads } from "../services/leadService";
 
 function StatCard({ 
   label, 
@@ -53,24 +54,14 @@ function EmptyState({
   );
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const cls = score >= 80 ? "badge-green" : score >= 60 ? "badge-yellow" : "badge-red";
-  const fillColor = score >= 80 ? "var(--green)" : score >= 60 ? "var(--yellow)" : "var(--red)";
-  return (
-    <div className="score-wrap">
-      <span className={`badge ${cls}`}>{score}</span>
-      <div className="score-bar-bg">
-        <div className="score-bar-fill" style={{ width: `${score}%`, background: fillColor }} />
-      </div>
-    </div>
-  );
-}
 
 export default function Results() {
   const [filter, setFilter] = useState("All");
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
+  const clearLeads = useLeadStore((s) => s.clearLeads);
   
   const roles = ["All", "CEO", "CTO", "VP of Sales", "Head of HR", "Engineering Manager"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
@@ -85,6 +76,28 @@ export default function Results() {
     setSelectedLeads(newSelected);
   };
 
+  const handleSaveAll = async () => {
+    if (filtered.length === 0) return;
+    setSaving(true);
+    try {
+      const result = await saveLeads(filtered);
+      alert(result.message);
+    } catch (error) {
+      alert("Failed to save leads");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveSingle = async (lead: any) => {
+    try {
+      const result = await saveLeads([lead]);
+      alert(result.message);
+    } catch (error) {
+      alert("Failed to save lead");
+    }
+  };
+
   return (
     <div>
       {/* Page Header */}
@@ -96,17 +109,29 @@ export default function Results() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            onClick={clearLeads}
+            disabled={leads.length === 0}
+          >
+            <X size={12} /> Clear
+          </button>
           <button className="btn btn-secondary btn-sm"><Download size={12} /> Export</button>
-          <button className="btn btn-primary btn-sm"><Bookmark size={12} /> Save All</button>
+          <button 
+            className="btn btn-primary btn-sm" 
+            onClick={handleSaveAll}
+            disabled={saving || filtered.length === 0}
+          >
+            <Bookmark size={12} /> {saving ? "Saving..." : "Save All"}
+          </button>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
+      <div className="stats-grid stats-3" style={{ marginBottom: 20 }}>
         <StatCard label="Total Leads" value={leads.length.toString()} icon={Users} iconVariant="violet" />
         <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} iconVariant="violet" />
         <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
-        <StatCard label="High Score" value={leads.filter(l => l.score && l.score >= 80).length.toString()} icon={Search} iconVariant="violet" />
       </div>
 
       <div className="card" style={{ marginBottom: 14, height: "600px" }}>
@@ -129,7 +154,7 @@ export default function Results() {
                     <th>Role</th>
                     <th>Email</th>
                     <th>LinkedIn</th>
-                    <th>Score</th>
+                    <th>Company URL</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -151,7 +176,13 @@ export default function Results() {
                           ? <a href={lead.linkedin} className="linkedin-link"><Link size={12} /> Profile</a>
                           : <span className="muted">-</span>}
                       </td>
-                      <td>{typeof lead.score === "number" ? <ScoreBadge score={lead.score} /> : <span className="muted">-</span>}</td>
+                      <td>
+                        {lead.companyUrl
+                          ? <a href={lead.companyUrl} className="company-link" target="_blank" rel="noopener noreferrer">
+                              <Globe size={12} /> {lead.companyUrl.replace(/^https?:\/\//, '')}
+                            </a>
+                          : <span className="muted">-</span>}
+                      </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           {selectedLeads.has(i) && (
@@ -163,7 +194,15 @@ export default function Results() {
                               flexShrink: 0
                             }} />
                           )}
-                          <button className="btn btn-ghost btn-sm btn-icon"><Bookmark size={24} /></button>
+                          <button 
+                            className="btn btn-ghost btn-sm btn-icon" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveSingle(lead);
+                            }}
+                          >
+                            <Bookmark size={24} />
+                          </button>
                           <button className="btn btn-ghost btn-sm btn-icon"><Download size={24} /></button>
                         </div>
                       </td>

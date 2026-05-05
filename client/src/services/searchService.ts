@@ -8,6 +8,7 @@ export interface Lead {
   linkedin?: string;
   score?: number;
   company?: string;
+  companyUrl?: string;
   createdAt?: string;
 }
 

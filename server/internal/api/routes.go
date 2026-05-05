@@ -28,6 +28,7 @@ func Routes() *chi.Mux {
 	// Leads endpoints
 	r.Get("/leads", GetLeadsHandler)
 	r.Delete("/leads", DeleteLeadHandler)
+	r.Post("/leads/save", SaveLeadsHandler)
 
 	// Export endpoint
 	r.Get("/export", ExportHandler)

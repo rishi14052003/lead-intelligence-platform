@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -14,6 +15,10 @@ import (
 
 type LeadsRequest struct {
 	Role string `json:"role"`
+}
+
+type SaveLeadsRequest struct {
+	Leads []models.Lead `json:"leads"`
 }
 
 type LeadsResponse struct {
@@ -77,7 +82,7 @@ func GetLeadsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteLeadHandler handles the DELETE /leads/:id endpoint
+// DeleteLeadHandler handles the DELETE /leads endpoint
 func DeleteLeadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -86,19 +91,90 @@ func DeleteLeadHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := database.Get()
+	leadService := services.NewLeadService(db)
+
 	id := r.URL.Query().Get("id")
+
 	if id == "" {
+		// Delete all leads
+		err := leadService.DeleteAllLeads(ctx)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
+				"success": "false",
+				"message": "Failed to delete all leads",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "All leads deleted successfully",
+		})
+		return
+	}
+
+	// Delete specific lead by ID
+	// TODO: Implement single lead deletion
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Lead deleted successfully",
+	})
+}
+
+// SaveLeadsHandler handles the POST /leads/save endpoint
+func SaveLeadsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var req SaveLeadsRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"success": "false",
-			"message": "ID is required",
+			"message": "Invalid request body",
 		})
 		return
+	}
+
+	if len(req.Leads) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"success": "false",
+			"message": "No leads to save",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := database.Get()
+	leadService := services.NewLeadService(db)
+
+	// Save each lead
+	savedCount := 0
+	for _, lead := range req.Leads {
+		err := leadService.SaveLead(ctx, &lead)
+		if err == nil {
+			savedCount++
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": "Lead deleted successfully",
+		"message": fmt.Sprintf("Saved %d leads", savedCount),
+		"count":   savedCount,
 	})
 }

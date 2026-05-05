@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -54,8 +55,16 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 	// Sanitize input
 	query = utils.SanitizeInput(query)
 
-	// Convert company name to domain if needed
-	domain := utils.FormatDomain(query)
+	// Extract company name from query (remove city if present)
+	// Split by space and take first part as company name
+	parts := strings.Fields(query)
+	var companyName string
+	if len(parts) > 0 {
+		companyName = parts[0]
+	}
+
+	// Convert company name to domain
+	domain := utils.FormatDomain(companyName)
 
 	log.Printf("Starting search for domain: %s", domain)
 
@@ -107,11 +116,12 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		}
 
 		lead := &models.Lead{
-			Email:     email,
-			Company:   utils.FormatCompanyName(domain),
-			SearchID:  searchID.(primitive.ObjectID),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			Email:      email,
+			Company:    utils.FormatCompanyName(domain),
+			CompanyURL: fmt.Sprintf("https://%s", utils.FormatDomain(domain)),
+			SearchID:   searchID.(primitive.ObjectID),
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 
 		// Try to extract name from email
@@ -133,12 +143,13 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		email := ls.findEmailForName(name, allEmails)
 
 		lead := &models.Lead{
-			Name:      name,
-			Email:     email,
-			Company:   utils.FormatCompanyName(domain),
-			SearchID:  searchID.(primitive.ObjectID),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			Name:       name,
+			Email:      email,
+			Company:    utils.FormatCompanyName(domain),
+			CompanyURL: fmt.Sprintf("https://%s", utils.FormatDomain(domain)),
+			SearchID:   searchID.(primitive.ObjectID),
+			CreatedAt:  time.Now(),
+			UpdatedAt:  time.Now(),
 		}
 
 		// Use name as key if no email
@@ -179,11 +190,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 	// Limit results
 	if len(leads) > ls.maxLeads {
 		leads = leads[:ls.maxLeads]
-	}
-
-	// Save leads to database
-	for i := range leads {
-		ls.saveLead(ctx, &leads[i])
 	}
 
 	// Update search with results count
@@ -255,7 +261,7 @@ func (ls *LeadService) GetSearchHistory(ctx context.Context) ([]models.Search, e
 
 // Helper functions
 
-func (ls *LeadService) saveLead(ctx context.Context, lead *models.Lead) error {
+func (ls *LeadService) SaveLead(ctx context.Context, lead *models.Lead) error {
 	collection := ls.db.Instance.Collection("leads")
 
 	// Check if lead already exists
@@ -271,6 +277,12 @@ func (ls *LeadService) saveLead(ctx context.Context, lead *models.Lead) error {
 
 	// Insert new lead
 	_, err := collection.InsertOne(ctx, lead)
+	return err
+}
+
+func (ls *LeadService) DeleteAllLeads(ctx context.Context) error {
+	collection := ls.db.Instance.Collection("leads")
+	_, err := collection.DeleteMany(ctx, bson.M{})
 	return err
 }
 

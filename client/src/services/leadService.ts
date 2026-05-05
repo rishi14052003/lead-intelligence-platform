@@ -60,3 +60,13 @@ export async function clearAllLeads(): Promise<void> {
 		throw error;
 	}
 }
+
+export async function saveLeads(leads: Lead[]): Promise<{ success: boolean; message: string; count: number }> {
+	try {
+		const response = await api.post("/leads/save", { leads });
+		return response.data;
+	} catch (error) {
+		console.error("Error saving leads:", error);
+		throw error;
+	}
+}
