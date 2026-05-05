@@ -118,7 +118,7 @@ export default function Dashboard() {
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
           iconSize={19}
-          onClick={() => { navigate("search"); toggleActionSelection(0); }}
+          onClick={() => { navigate("/search"); toggleActionSelection(0); }}
           style={{ cursor: "pointer" }}
         />
         <StatCard 
@@ -129,7 +129,7 @@ export default function Dashboard() {
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
           iconSize={19}
-          onClick={() => { navigate("saved"); toggleActionSelection(1); }}
+          onClick={() => { navigate("/saved"); toggleActionSelection(1); }}
           style={{ cursor: "pointer" }}
         />
         <StatCard 
@@ -140,7 +140,7 @@ export default function Dashboard() {
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
           iconSize={19}
-          onClick={() => { navigate("history"); toggleActionSelection(2); }}
+          onClick={() => { navigate("/history"); toggleActionSelection(2); }}
           style={{ cursor: "pointer" }}
         />
       </div>
