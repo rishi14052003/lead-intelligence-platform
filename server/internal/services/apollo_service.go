@@ -22,7 +22,6 @@ type ApolloService struct {
 // ApolloSearchRequest represents the request to Apollo API
 type ApolloSearchRequest struct {
 	Query        string   `json:"q"`
-	APIKey       string   `json:"api_key"`
 	PersonTitles []string `json:"person_titles,omitempty"`
 	Limit        int      `json:"limit"`
 	PageSize     int      `json:"page_size"`
@@ -80,7 +79,6 @@ func (as *ApolloService) SearchLeads(companyName string) ([]models.Lead, error) 
 
 	req := ApolloSearchRequest{
 		Query:        companyName,
-		APIKey:       as.apiKey,
 		PersonTitles: titles,
 		Limit:        10,
 		PageSize:     10,
@@ -115,6 +113,7 @@ func (as *ApolloService) searchAPI(req ApolloSearchRequest) (*ApolloSearchRespon
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "Go-Lead-CEO-Finder/1.0")
+	httpReq.Header.Set("X-Api-Key", as.apiKey)
 
 	resp, err := as.client.Do(httpReq)
 	if err != nil {
@@ -217,7 +216,6 @@ func (as *ApolloService) GetLeadsCount(companyName string) (int, error) {
 
 	req := ApolloSearchRequest{
 		Query:    companyName,
-		APIKey:   as.apiKey,
 		Limit:    1,
 		PageSize: 1,
 	}
