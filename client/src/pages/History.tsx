@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Clock, TrendingUp, Filter, Bookmark } from "lucide-react";
+import { Search, Clock, TrendingUp, Bookmark, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ExportDropdown from "../components/ExportDropdown";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
+import { useHistoryStore } from "../store/historyStore";
+import Dialog from "../components/Dialog";
 
 function StatCard({ 
   label, 
@@ -58,7 +60,31 @@ function EmptyState({
 export default function History() {
   const navigate = useNavigate();
   const [selectedHistory, setSelectedHistory] = useState<Set<number>>(new Set());
-  const history: any[] = [];
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(7);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant: "danger" | "primary" | "default";
+  } | null>(null);
+  const { history, clearHistory, loadFromLocalStorage } = useHistoryStore();
+
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(history.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentHistory = history.slice(startIndex, endIndex);
+
+  // Reset to page 1 when history changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [history.length]);
 
   const toggleHistorySelection = (index: number) => {
     const newSelected = new Set(selectedHistory);
@@ -68,6 +94,19 @@ export default function History() {
       newSelected.add(index);
     }
     setSelectedHistory(newSelected);
+  };
+
+  const handleClearHistory = () => {
+    setDialogConfig({
+      title: "Clear Search History",
+      message: "Are you sure you want to clear all search history? This action cannot be undone.",
+      onConfirm: async () => {
+        clearHistory();
+        setDialogOpen(false);
+      },
+      variant: "danger",
+    });
+    setDialogOpen(true);
   };
 
   const handleExport = (format: 'pdf' | 'excel' | 'word') => {
@@ -103,9 +142,9 @@ export default function History() {
 
       {/* Stats Grid */}
       <div className="stats-grid stats-4" style={{ marginBottom: 20 }}>
-        <StatCard label="High Score" value="0" icon={Search} iconVariant="violet" />
-        <StatCard label="Companies Found" value="0" icon={Search} iconVariant="violet" />
-        <StatCard label="Leads Discovered" value="0" icon={Bookmark} iconVariant="violet" />
+        <StatCard label="Total Searches" value={history.length.toString()} icon={Search} iconVariant="violet" />
+        <StatCard label="Companies Found" value={history.length.toString()} icon={Search} iconVariant="violet" />
+        <StatCard label="Leads Discovered" value={history.reduce((sum, h) => sum + h.leadsFound, 0).toString()} icon={Bookmark} iconVariant="violet" />
         <StatCard label="Success Rate" value="0%" icon={TrendingUp} iconVariant="violet" />
       </div>
 
@@ -113,7 +152,7 @@ export default function History() {
       <div className="row" style={{ gap: 14 }}>
         {/* Recent Searches */}
         <div className="col-6" style={{ flex: 2 }}>
-          <div className="card" style={{ marginBottom: 14, height: "514px" }}>
+          <div className="card" style={{ marginBottom: 14, display: "flex", flexDirection: "column" }}>
             <div className="card-header">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Clock size={19} />
@@ -121,12 +160,12 @@ export default function History() {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <ExportDropdown onExport={handleExport} disabled={history.length === 0} />
-                <button className="btn btn-ghost btn-sm">
-                  <Filter size={15} /> Filter
+                <button className="btn btn-danger btn-sm" onClick={handleClearHistory} disabled={history.length === 0}>
+                  <Trash size={15} /> Clear
                 </button>
               </div>
             </div>
-            <div className="card-body">
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", flex: 1 }}>
               {history.length === 0 ? (
                 <EmptyState 
                   icon={Clock} 
@@ -134,35 +173,58 @@ export default function History() {
                   subtitle="Your previous searches will appear here once you start exploring companies." 
                 />
               ) : (
-                <div className="history-list">
-                  {history.map((h, i) => (
-                    <div key={h.id} className="history-item" onClick={() => { navigate("/results"); toggleHistorySelection(i); }} style={{ cursor: "pointer" }}>
-                      <div className="history-left">
-                        <div className="history-icon-wrapper">
-                          <Search size={19} />
+                <>
+                  <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0 }}>
+                    {currentHistory.map((h, i) => (
+                      <div key={h.id} className="history-item" onClick={() => { navigate("/results"); toggleHistorySelection(i); }} style={{ cursor: "pointer" }}>
+                        <div className="history-left">
+                          <div className="history-icon-wrapper">
+                            <Search size={19} />
+                          </div>
+                          <div className="history-content">
+                            <div className="history-domain">{h.domain}</div>
+                            <div className="history-meta">{h.date} · {h.leadsFound} leads found</div>
+                          </div>
                         </div>
-                        <div className="history-content">
-                          <div className="history-domain">{h.domain}</div>
-                          <div className="history-meta">{h.date} · {h.leadsFound} leads found</div>
+                        <div className="history-right">
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {selectedHistory.has(i) && (
+                              <div style={{ 
+                                width: 8, 
+                                height: 8, 
+                                borderRadius: "50%", 
+                                backgroundColor: "#3b82f6",
+                                flexShrink: 0
+                              }} />
+                            )}
+                            <div className="history-badge">{h.leadsFound}</div>
+                          </div>
                         </div>
                       </div>
-                      <div className="history-right">
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {selectedHistory.has(i) && (
-                            <div style={{ 
-                              width: 8, 
-                              height: 8, 
-                              borderRadius: "50%", 
-                              backgroundColor: "#3b82f6",
-                              flexShrink: 0
-                            }} />
-                          )}
-                          <div className="history-badge">{h.leadsFound}</div>
-                        </div>
+                    ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="pagination">
+                      <span>Showing {startIndex + 1}-{Math.min(endIndex, history.length)} of {history.length} searches</span>
+                      <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                        <button 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Prev
+                        </button>
+                        <button 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -233,6 +295,17 @@ export default function History() {
 
                   </div>
       </div>
+      
+      {dialogOpen && dialogConfig && (
+        <Dialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          title={dialogConfig.title}
+          message={dialogConfig.message}
+          onConfirm={dialogConfig.onConfirm}
+          variant={dialogConfig.variant}
+        />
+      )}
     </div>
   );
 }

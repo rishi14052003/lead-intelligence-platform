@@ -1,9 +1,9 @@
 export default function SearchProgress() {
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-sm w-full mx-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-lg flex items-center justify-center z-[9999]">
+      <div className="bg-white/98 backdrop-blur-md rounded-3xl shadow-2xl p-16 max-w-md w-full mx-4">
         {/* Circular Progress Track */}
-        <div className="flex justify-center mb-8">
+        <div className="flex justify-center mb-6">
           <div className="relative w-16 h-16">
             {/* Background circle */}
             <svg className="w-full h-full" viewBox="0 0 100 100">
@@ -57,7 +57,7 @@ export default function SearchProgress() {
         </p>
 
         {/* Progress Steps */}
-        <div className="space-y-3 mb-6">
+        <div className="mb-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center mt-0.5 animate-pulse">
               <div className="w-2 h-2 bg-white rounded-full" />
@@ -65,24 +65,6 @@ export default function SearchProgress() {
             <div>
               <p className="text-sm font-medium text-gray-900">Scraping websites</p>
               <p className="text-xs text-gray-500">Analyzing company pages</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center mt-0.5">
-              <div className="w-2 h-2 bg-gray-400 rounded-full" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Finding executives</p>
-              <p className="text-xs text-gray-400">Identifying decision makers</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-300 flex items-center justify-center mt-0.5">
-              <div className="w-2 h-2 bg-gray-400 rounded-full" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Enriching with LinkedIn</p>
-              <p className="text-xs text-gray-400">Fetching profile data</p>
             </div>
           </div>
         </div>

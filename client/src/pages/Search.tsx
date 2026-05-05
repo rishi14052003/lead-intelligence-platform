@@ -5,14 +5,11 @@ import {
   ArrowRight,
   Globe,
   Users,
-  TrendingUp,
   Shield,
-  Sparkles,
 } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
+import { useHistoryStore } from "../store/historyStore";
 import SearchProgress from "../components/feedback/SearchProgress";
-
-const EXAMPLE_DOMAINS = ["Stripe", "OpenAI", "Notion", "Vercel", "Figma", "Linear"];
 
 const FEATURES = [
   {
@@ -28,13 +25,6 @@ const FEATURES = [
     desc: "Identifies CEOs, CTOs, VPs and key decision makers with verified profiles.",
     color: "rgba(16,185,129,0.1)",
     border: "rgba(16,185,129,0.2)",
-  },
-  {
-    icon: TrendingUp,
-    title: "Lead Scoring",
-    desc: "AI-powered scoring ranks leads by relevance, role seniority, and data completeness.",
-    color: "rgba(56,189,248,0.1)",
-    border: "rgba(56,189,248,0.2)",
   },
   {
     icon: Shield,
@@ -58,7 +48,8 @@ export default function SearchPage() {
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { search, loading } = useLeadStore();
+  const { search, loading, leads } = useLeadStore();
+  const { addHistory } = useHistoryStore();
 
   useEffect(() => {
     setMounted(true);
@@ -75,16 +66,18 @@ export default function SearchPage() {
     setError("");
     try {
       await search(trimmed);
+      // Add to history after successful search
+      addHistory({
+        id: Date.now().toString(),
+        domain: trimmed,
+        date: new Date().toLocaleDateString(),
+        leadsFound: leads.length,
+        leads: leads,
+      });
       navigate("/results");
     } catch {
       setError("Something went wrong. Please try again.");
     }
-  };
-
-  const handleExample = (domain: string) => {
-    setQuery(domain);
-    setError("");
-    inputRef.current?.focus();
   };
 
   return (
@@ -92,19 +85,14 @@ export default function SearchPage() {
       {/* Loading Progress Overlay - outside blur container */}
       {loading && <SearchProgress />}
 
-      <div className={`search-page-v2 ${mounted ? "mounted" : ""} ${loading ? "blur-background" : ""}`}>
+      <div className={`search-page-v2 ${mounted ? "mounted" : ""}`}>
 
       <div className="search-orb search-orb-1" />
       <div className="search-orb search-orb-2" />
       <div className="search-orb search-orb-3" />
 
       {/* Hero */}
-      <div className="search-hero-v2" style={{ maxWidth: 900 }}>
-
-        <div className="search-badge">
-          <Sparkles size={13} />
-          <span>AI-Powered Lead Discovery Engine</span>
-        </div>
+      <div className="search-hero-v2" style={{ maxWidth: 900, paddingTop: 0 }}>
 
         <h1 className="search-headline">
           Find the right
@@ -119,9 +107,12 @@ export default function SearchPage() {
         {/* Search Card */}
         <div
           className={`search-card-v2 ${focused ? "focused" : ""} ${error ? "has-error" : ""}`}
-          style={{ maxWidth: "100%" }}
+          style={{
+            maxWidth: "100%",
+            ...(focused && { borderColor: "var(--accent, #f97316)", boxShadow: "0 0 0 3px rgba(249,115,22,0.18)" }),
+          }}
         >
-          <form onSubmit={onSearch}>
+          <form onSubmit={onSearch} style={{ outline: 'none', boxShadow: 'none' }}>
             <div className="search-field-wrap" style={{ padding: "8px 8px 8px 18px" }}>
               <div className="search-field-icon">
                 <SearchIcon size={19} />
@@ -163,29 +154,13 @@ export default function SearchPage() {
               </div>
             )}
           </form>
-
-          <div className="search-examples-row" style={{ marginTop: 16 }}>
-            <span className="search-examples-label" style={{ fontSize: 13 }}>Try:</span>
-            {EXAMPLE_DOMAINS.map((d) => (
-              <button
-                key={d}
-                className="search-example-chip"
-                onClick={() => handleExample(d)}
-                disabled={loading}
-                type="button"
-                style={{ fontSize: 13, padding: "5px 14px" }}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* How It Works + Features */}
       <div
         className="search-features-section"
-        style={{ marginTop: 56, maxWidth: 900 }}
+        style={{ marginTop: 12, maxWidth: 900 }}
       >
         <p className="search-features-eyebrow">How it works</p>
         <div
@@ -193,7 +168,7 @@ export default function SearchPage() {
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
             gap: 16,
-            marginBottom: 48,
+            marginBottom: 12,
           }}
         >
           {HOW_IT_WORKS.map((step, i) => (
@@ -204,8 +179,8 @@ export default function SearchPage() {
                 animationDelay: `${0.05 + i * 0.08}s`,
                 display: "flex",
                 flexDirection: "column",
-                gap: 12,
-                padding: "28px 24px",
+                gap: 10,
+                padding: "18px 16px",
               }}
             >
               <span
@@ -246,7 +221,7 @@ export default function SearchPage() {
         <p className="search-features-eyebrow">What you get</p>
         <div
           className="search-features-grid"
-          style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}
+          style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}
         >
           {FEATURES.map((f, i) => (
             <div
@@ -254,7 +229,10 @@ export default function SearchPage() {
               className="search-feature-card"
               style={{
                 animationDelay: `${0.2 + i * 0.08}s`,
-                padding: "24px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                padding: "18px 16px",
               }}
             >
               <div
@@ -271,13 +249,13 @@ export default function SearchPage() {
               </div>
               <h3
                 className="search-feature-title"
-                style={{ fontSize: 15, marginTop: 4 }}
+                style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}
               >
                 {f.title}
               </h3>
               <p
                 className="search-feature-desc"
-                style={{ fontSize: 13.5, lineHeight: 1.65 }}
+                style={{ fontSize: 14, lineHeight: 1.65, margin: 0 }}
               >
                 {f.desc}
               </p>

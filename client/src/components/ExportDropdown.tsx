@@ -56,9 +56,9 @@ export default function ExportDropdown({ onExport, disabled = false }: ExportDro
         className="btn btn-secondary btn-sm"
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: "nowrap", minHeight: "36px" }}
       >
-        <Download size={18} />
+        <Download size={14} />
         Export
       </button>
 

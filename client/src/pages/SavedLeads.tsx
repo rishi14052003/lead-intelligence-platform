@@ -63,7 +63,7 @@ export default function SavedLeads() {
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(7);
   const [dialogConfig, setDialogConfig] = useState<{
     title: string;
     message: string;
@@ -103,7 +103,7 @@ export default function SavedLeads() {
       message: "Are you sure you want to clear all saved leads? This action cannot be undone.",
       onConfirm: async () => {
         await clearAllSavedLeads();
-        setDialogOpen(false);
+        setDialogOpen(false); 
       },
       variant: "danger",
     });
@@ -177,7 +177,7 @@ export default function SavedLeads() {
         <StatCard label="LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
       </div>
 
-      <div className="card" style={{ height: "600px" }}>
+      <div className="card" style={{ display: "flex", flexDirection: "column" }}>
         <div className="card-header">
           <span className="card-title">Your Saved Leads · <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: 16 }}>{leads.length} saved</span></span>
           <div style={{ display: "flex", gap: 8 }}>
@@ -187,7 +187,7 @@ export default function SavedLeads() {
         </div>
         {leads.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ tableLayout: "fixed" }}>
+            <div className="table-wrap" style={{ tableLayout: "fixed", flex: 1, overflowY: "auto" }}>
               <table style={{ width: "100%" }}>
                 <thead>
                   <tr>

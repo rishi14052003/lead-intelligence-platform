@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Users, Mail, Link, Bookmark, Download, Filter, Globe, X } from "lucide-react";
+import { Search, Users, Mail, Link, Bookmark, Download, Filter, Globe, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { saveLeads } from "../services/leadService";
@@ -77,7 +77,7 @@ export default function Results() {
   const [saving, setSaving] = useState(false);
   const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(7);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogConfig, setDialogConfig] = useState<{
     title: string;
@@ -88,6 +88,12 @@ export default function Results() {
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
+  const loadFromLocalStorage = useLeadStore((s) => s.loadFromLocalStorage);
+  
+  // Load from localStorage on mount
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
   
   // Load saved lead IDs on mount to check which are already saved
   useEffect(() => {
@@ -232,21 +238,23 @@ export default function Results() {
         <div>
           <div className="page-title">Search Results</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button 
             className="btn btn-secondary btn-sm" 
             onClick={handleClear}
             disabled={leads.length === 0}
+            style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minHeight: "36px" }}
           >
-            <X size={12} /> Clear
+            <Trash2 size={14} /> Clear
           </button>
           <ExportDropdown onExport={handleExport} disabled={loading || filtered.length === 0} />
           <button 
             className="btn btn-primary btn-sm" 
             onClick={handleSaveAll}
             disabled={saving || filtered.length === 0}
+            style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minHeight: "36px" }}
           >
-            <Bookmark size={12} /> {saving ? "Saving..." : "Save All"}
+            <Bookmark size={14} /> {saving ? "Saving..." : "Save All"}
           </button>
         </div>
       </div>
@@ -258,7 +266,7 @@ export default function Results() {
         <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
       </div>
 
-      <div className="card" style={{ marginBottom: 14, height: "600px" }}>
+      <div className="card" style={{ marginBottom: 14, display: "flex", flexDirection: "column" }}>
         <div className="card-header">
           <span className="card-title">Lead Results</span>
           <div className="filter-pills">
@@ -270,7 +278,7 @@ export default function Results() {
         </div>
         {filtered.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ tableLayout: "fixed" }}>
+            <div className="table-wrap" style={{ tableLayout: "fixed", flex: 1, overflowY: "auto" }}>
               <table style={{ width: "100%" }}>
                 <thead>
                   <tr>
