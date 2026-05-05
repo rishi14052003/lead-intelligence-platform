@@ -167,9 +167,6 @@ export default function Results() {
       <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
           <div className="page-title">Search Results</div>
-          <div className="page-subtitle">
-            {loading ? "Searching..." : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""} found · tesla.com`}
-          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button 
