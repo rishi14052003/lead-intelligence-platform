@@ -51,3 +51,12 @@ export async function deleteLead(id: string): Promise<void> {
 		throw error;
 	}
 }
+
+export async function clearAllLeads(): Promise<void> {
+	try {
+		await api.delete("/leads");
+	} catch (error) {
+		console.error("Error clearing all leads:", error);
+		throw error;
+	}
+}

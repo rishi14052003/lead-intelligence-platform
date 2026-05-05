@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bookmark, Mail, Link, Star, Download, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useLeadStore } from "../store/leadStore";
 
 function StatCard({ 
   label, 
@@ -58,7 +59,11 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function SavedLeads() {
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
-  const leads: any[] = [];
+  const { leads, loading, fetchSavedLeads, clearAllSavedLeads } = useLeadStore();
+
+  useEffect(() => {
+    fetchSavedLeads();
+  }, [fetchSavedLeads]);
 
   const toggleLeadSelection = (index: number) => {
     const newSelected = new Set(selectedLeads);
@@ -68,6 +73,12 @@ export default function SavedLeads() {
       newSelected.add(index);
     }
     setSelectedLeads(newSelected);
+  };
+
+  const handleClearAll = async () => {
+    if (window.confirm("Are you sure you want to clear all saved leads?")) {
+      await clearAllSavedLeads();
+    }
   };
 
   return (
@@ -91,7 +102,7 @@ export default function SavedLeads() {
           <span className="card-title">Your Saved Leads · <span style={{ color: "var(--text2)", fontWeight: 400, fontSize: 16 }}>{leads.length} saved</span></span>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-secondary btn-sm"><Download size={18} /> Export</button>
-            <button className="btn btn-danger btn-sm"><Trash size={18} /> Clear All</button>
+            <button className="btn btn-danger btn-sm" onClick={handleClearAll} disabled={loading || leads.length === 0}><Trash size={18} /> Clear All</button>
           </div>
         </div>
         {leads.length > 0 ? (

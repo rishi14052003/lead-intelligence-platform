@@ -26,7 +26,7 @@ export default function Topbar() {
           <div className="topbar-actions">
             <button
               className="topbar-icon-btn"
-              title="Toggle theme"
+              title={theme === "light" ? "Dark mode" : "Light mode"}
               onClick={toggleTheme}
             >
               {theme === "light" ? <Moon size={24} /> : <Sun size={24} />}

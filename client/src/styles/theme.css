@@ -302,14 +302,14 @@ html, body, #root { height: 100%; background: var(--bg); }
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   transition: box-shadow 0.15s ease, transform 0.1s ease;
-  border: none;
+  border: none !important;
   padding: 0;
 }
 
@@ -344,11 +344,14 @@ html, body, #root { height: 100%; background: var(--bg); }
 }
 
 .icon-btn {
-  width: 34px; height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   background: var(--surface2);
   border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: all 0.15s;
   color: var(--text2);
@@ -376,7 +379,7 @@ html, body, #root { height: 100%; background: var(--bg); }
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  width: 320px;
+  width: 400px;
   max-height: 400px;
   overflow: hidden;
   animation: slideDown 0.2s ease-out;
@@ -458,7 +461,7 @@ html, body, #root { height: 100%; background: var(--bg); }
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  width: 280px;
+  width: 460px;
   overflow: hidden;
   animation: slideDown 0.2s ease-out;
 }
@@ -971,34 +974,6 @@ html, body, #root { height: 100%; background: var(--bg); }
 
 .btn-icon { padding: 6px 10px; }
 
-/* Icon button styling */
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.15s;
-  color: var(--text2);
-}
-
-/* Light mode icon buttons */
-:root .icon-btn:hover {
-  background: #f1f5f9;
-  border-color: #e2e8f0;
-  color: #1e293b;
-}
-
-/* Dark mode icon buttons */
-[data-theme="dark"] .icon-btn:hover {
-  background: var(--surface2);
-  border-color: var(--border);
-  color: var(--text);
-}
 
 /* Table */
 .table-wrap { overflow-x: auto; }

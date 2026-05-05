@@ -81,7 +81,7 @@ function DarkTopbar({
       <div className="topbar-right">
         <button
           className="icon-btn"
-          title="Toggle Theme"
+          title={theme === "light" ? "Dark mode" : "Light mode"}
           onClick={onToggleTheme}
         >
           {theme === "light" ? <Moon size={24} /> : <Sun size={24} />}
