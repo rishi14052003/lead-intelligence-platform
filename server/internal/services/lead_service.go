@@ -6,23 +6,25 @@ import (
 	"strings"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"lead-finder/internal/database"
 	"lead-finder/internal/models"
 	"lead-finder/internal/scraper"
 	"lead-finder/internal/utils"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // LeadService orchestrates lead finding and enrichment
 type LeadService struct {
-	db               *database.Database
-	webScraper       *scraper.WebScraper
-	googleScraper    *scraper.GoogleScraper
-	linkedinParser   *scraper.LinkedInParser
-	scoringService   *ScoringService
-	emailService     *EmailService
-	maxLeads         int
+	db             *database.Database
+	webScraper     *scraper.WebScraper
+	googleScraper  *scraper.GoogleScraper
+	linkedinParser *scraper.LinkedInParser
+	scoringService *ScoringService
+	emailService   *EmailService
+	maxLeads       int
 }
 
 // NewLeadService creates a new lead service
@@ -105,7 +107,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		lead := &models.Lead{
 			Email:     email,
 			Company:   utils.FormatCompanyName(domain),
-			SearchID:  searchID,
+			SearchID:  searchID.(primitive.ObjectID),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
@@ -132,7 +134,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			Name:      name,
 			Email:     email,
 			Company:   utils.FormatCompanyName(domain),
-			SearchID:  searchID,
+			SearchID:  searchID.(primitive.ObjectID),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
@@ -194,7 +196,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 func (ls *LeadService) GetAllLeads(ctx context.Context) ([]models.Lead, error) {
 	collection := ls.db.Instance.Collection("leads")
 
-	opts := &mongo.FindOptions{}
+	opts := options.Find()
 	opts.SetLimit(100)
 
 	cursor, err := collection.Find(ctx, bson.M{}, opts)
@@ -233,7 +235,7 @@ func (ls *LeadService) GetLeadsByRole(ctx context.Context, role string) ([]model
 func (ls *LeadService) GetSearchHistory(ctx context.Context) ([]models.Search, error) {
 	collection := ls.db.Instance.Collection("searches")
 
-	opts := &mongo.FindOptions{}
+	opts := options.Find()
 	opts.SetLimit(50)
 
 	cursor, err := collection.Find(ctx, bson.M{}, opts)
@@ -364,14 +366,6 @@ type ValidationError struct {
 func (ve *ValidationError) Error() string {
 	return ve.Message
 }
-
-import (
-	"strings"
-
-	"lead-finder/internal/models"
-	"lead-finder/internal/scraper"
-	"lead-finder/internal/utils"
-)
 
 func isValidEmail(email string) bool {
 	blocked := []string{"noreply", "support", "info", "admin"}

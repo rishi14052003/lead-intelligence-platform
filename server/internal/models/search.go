@@ -1,7 +1,15 @@
 package models
 
-// Search models are defined in lead.go to keep related models together
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type Search struct {
-	Query string `json:"query"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Query        string             `bson:"query" json:"query"`
+	Domain       string             `bson:"domain" json:"domain"`
+	ResultsCount int                `bson:"resultsCount" json:"resultsCount"`
+	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 }

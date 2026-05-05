@@ -19,25 +19,9 @@ type Lead struct {
 	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
 
-type Search struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Query        string             `bson:"query" json:"query"`
-	Domain       string             `bson:"domain" json:"domain"`
-	ResultsCount int                `bson:"resultsCount" json:"resultsCount"`
-	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
-}
-
 type User struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Email     string             `bson:"email" json:"email"`
 	Password  string             `bson:"password" json:"-"`
 	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
-}
-
-type Lead struct {
-	Name     string `json:"name"`
-	Role     string `json:"role"`
-	Email    string `json:"email"`
-	LinkedIn string `json:"linkedin,omitempty"`
-	Score    int    `json:"score"`
 }

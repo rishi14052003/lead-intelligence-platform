@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"lead-finder/internal/middleware"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // Routes returns the router with all API routes
@@ -30,16 +31,6 @@ func Routes() *chi.Mux {
 
 	// Export endpoint
 	r.Get("/export", ExportHandler)
-
-	return r
-}
-
-import "github.com/go-chi/chi/v5"
-
-func Routes() *chi.Mux {
-	r := chi.NewRouter()
-
-	r.Post("/search", SearchHandler)
 
 	return r
 }

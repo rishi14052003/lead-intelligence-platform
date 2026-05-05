@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"lead-finder/internal/utils"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // WebScraper handles website scraping
@@ -170,12 +172,6 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
-
-import (
-	"io"
-	"net/http"
-	"regexp"
-)
 
 func ExtractEmails(domain string) []string {
 	resp, err := http.Get("https://" + domain)

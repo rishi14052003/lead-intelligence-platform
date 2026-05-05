@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -196,8 +195,6 @@ func GetInitials(name string) string {
 	return strings.ToUpper(initials)
 }
 
-import "strings"
-
 func ExtractCompanyName(domain string) string {
 	parts := strings.Split(domain, ".")
 	if len(parts) > 0 {
@@ -205,12 +202,6 @@ func ExtractCompanyName(domain string) string {
 		return strings.ToUpper(string(name[0])) + name[1:]
 	}
 	return domain
-}
-
-func NormalizeName(name string) string {
-	name = strings.ToLower(name)
-	name = strings.ReplaceAll(name, " ", "-")
-	return name
 }
 
 func ExtractNameFromEmail(email string) string {

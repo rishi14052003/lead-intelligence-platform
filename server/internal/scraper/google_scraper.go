@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -104,15 +105,6 @@ func (gs *GoogleScraper) fetchHTML(urlStr string) (string, error) {
 
 	return string(body), nil
 }
-
-import (
-	"io"
-	"net/http"
-	"net/url"
-	"regexp"
-	"strings"
-	"time"
-)
 
 func SearchGoogle(query string) string {
 	searchURL := "https://www.google.com/search?q=" + url.QueryEscape(query)
