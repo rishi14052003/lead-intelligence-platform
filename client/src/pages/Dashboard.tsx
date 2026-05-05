@@ -78,9 +78,48 @@ function EmptyState({
   );
 }
 
+function getWeekRange() {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // adjust when day is Sunday
+  const monday = new Date(now.setDate(diff));
+  const sunday = new Date(now.setDate(diff + 6));
+  return { start: monday, end: sunday };
+}
+
+function getMonthRange() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0);
+  return { start, end };
+}
+
+function getYearRange() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31);
+  return { start, end };
+}
+
+function formatDateRange(start: Date, end: Date): string {
+  const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${startStr} - ${endStr}`;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedActions, setSelectedActions] = useState<Set<number>>(new Set());
+  const [performancePeriod, setPerformancePeriod] = useState<'week' | 'month' | 'year'>('week');
+  
+  const getDateRange = () => {
+    if (performancePeriod === 'week') return getWeekRange();
+    if (performancePeriod === 'month') return getMonthRange();
+    return getYearRange();
+  };
 
   const toggleActionSelection = (index: number) => {
     const newSelected = new Set(selectedActions);
@@ -162,15 +201,35 @@ export default function Dashboard() {
         <div className="card-header">
           <span className="card-title">Performance Overview</span>
           <div className="filter-pills">
-            <button className="filter-pill active">Week</button>
-            <button className="filter-pill">Month</button>
-            <button className="filter-pill">Year</button>
+            <button 
+              className={`filter-pill ${performancePeriod === 'week' ? 'active' : ''}`}
+              onClick={() => setPerformancePeriod('week')}
+            >
+              Week
+            </button>
+            <button 
+              className={`filter-pill ${performancePeriod === 'month' ? 'active' : ''}`}
+              onClick={() => setPerformancePeriod('month')}
+            >
+              Month
+            </button>
+            <button 
+              className={`filter-pill ${performancePeriod === 'year' ? 'active' : ''}`}
+              onClick={() => setPerformancePeriod('year')}
+            >
+              Year
+            </button>
           </div>
         </div>
         <div className="card-body">
           <div className="chart-placeholder">
             <BarChart3 size={28} />
-            <span>Start searching for leads to see performance metrics</span>
+            <div style={{ marginTop: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+                {formatDateRange(getDateRange().start, getDateRange().end)}
+              </div>
+              <span>Start searching for leads to see performance metrics</span>
+            </div>
           </div>
         </div>
       </div>
