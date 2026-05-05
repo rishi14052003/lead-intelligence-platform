@@ -55,6 +55,7 @@ export const useLeadStore = create<State>((set) => ({
       let msg = "Unknown error";
       if (typeof err === "string") msg = err;
       else if (typeof err === "object" && err !== null && "message" in err && typeof (err as { message?: unknown }).message === "string") msg = (err as { message: string }).message;
+      console.error("Clear all leads error:", err);
       set({ error: msg, loading: false });
     }
   },

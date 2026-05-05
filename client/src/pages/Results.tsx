@@ -3,6 +3,9 @@ import { Search, Users, Mail, Link, Bookmark, Download, Filter, Globe, X } from 
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { saveLeads } from "../services/leadService";
+import Dialog from "../components/Dialog";
+import ExportDropdown from "../components/ExportDropdown";
+import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
 function StatCard({ 
   label, 
@@ -59,6 +62,13 @@ export default function Results() {
   const [filter, setFilter] = useState("All");
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant: "danger" | "primary" | "default";
+  } | null>(null);
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
@@ -81,9 +91,21 @@ export default function Results() {
     setSaving(true);
     try {
       const result = await saveLeads(filtered);
-      alert(result.message);
+      setDialogConfig({
+        title: "Success",
+        message: result.message,
+        onConfirm: () => setDialogOpen(false),
+        variant: "primary",
+      });
+      setDialogOpen(true);
     } catch (error) {
-      alert("Failed to save leads");
+      setDialogConfig({
+        title: "Error",
+        message: "Failed to save leads",
+        onConfirm: () => setDialogOpen(false),
+        variant: "danger",
+      });
+      setDialogOpen(true);
     } finally {
       setSaving(false);
     }
@@ -92,9 +114,50 @@ export default function Results() {
   const handleSaveSingle = async (lead: any) => {
     try {
       const result = await saveLeads([lead]);
-      alert(result.message);
+      setDialogConfig({
+        title: "Success",
+        message: result.message,
+        onConfirm: () => setDialogOpen(false),
+        variant: "primary",
+      });
+      setDialogOpen(true);
     } catch (error) {
-      alert("Failed to save lead");
+      setDialogConfig({
+        title: "Error",
+        message: "Failed to save lead",
+        onConfirm: () => setDialogOpen(false),
+        variant: "danger",
+      });
+      setDialogOpen(true);
+    }
+  };
+
+  const handleClear = () => {
+    setDialogConfig({
+      title: "Clear Results",
+      message: "Are you sure you want to clear all search results?",
+      onConfirm: () => {
+        clearLeads();
+        setDialogOpen(false);
+      },
+      variant: "danger",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleExport = (format: 'pdf' | 'excel' | 'word') => {
+    const exportFilename = `search-results-${new Date().toISOString().split('T')[0]}`;
+    
+    switch (format) {
+      case 'excel':
+        exportToExcel(filtered, exportFilename);
+        break;
+      case 'pdf':
+        exportToPDF(filtered, exportFilename);
+        break;
+      case 'word':
+        exportToWord(filtered, exportFilename);
+        break;
     }
   };
 
@@ -111,12 +174,12 @@ export default function Results() {
         <div style={{ display: "flex", gap: 8 }}>
           <button 
             className="btn btn-secondary btn-sm" 
-            onClick={clearLeads}
+            onClick={handleClear}
             disabled={leads.length === 0}
           >
             <X size={12} /> Clear
           </button>
-          <button className="btn btn-secondary btn-sm"><Download size={12} /> Export</button>
+          <ExportDropdown onExport={handleExport} disabled={loading || filtered.length === 0} />
           <button 
             className="btn btn-primary btn-sm" 
             onClick={handleSaveAll}
@@ -225,6 +288,17 @@ export default function Results() {
           </div>
         )}
       </div>
+      
+      {dialogOpen && dialogConfig && (
+        <Dialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          title={dialogConfig.title}
+          message={dialogConfig.message}
+          onConfirm={dialogConfig.onConfirm}
+          variant={dialogConfig.variant}
+        />
+      )}
     </div>
   );
 }

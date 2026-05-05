@@ -3,6 +3,7 @@ import { Bookmark, Mail, Link, Star, Trash } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import ExportDropdown from "../components/ExportDropdown";
+import Dialog from "../components/Dialog";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
 function StatCard({ 
@@ -61,6 +62,13 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function SavedLeads() {
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant: "danger" | "primary" | "default";
+  } | null>(null);
   const { leads, loading, fetchSavedLeads, clearAllSavedLeads } = useLeadStore();
 
   useEffect(() => {
@@ -77,10 +85,17 @@ export default function SavedLeads() {
     setSelectedLeads(newSelected);
   };
 
-  const handleClearAll = async () => {
-    if (window.confirm("Are you sure you want to clear all saved leads?")) {
-      await clearAllSavedLeads();
-    }
+  const handleClearAll = () => {
+    setDialogConfig({
+      title: "Clear All Saved Leads",
+      message: "Are you sure you want to clear all saved leads? This action cannot be undone.",
+      onConfirm: async () => {
+        await clearAllSavedLeads();
+        setDialogOpen(false);
+      },
+      variant: "danger",
+    });
+    setDialogOpen(true);
   };
 
   const handleExport = (format: 'pdf' | 'excel' | 'word') => {
@@ -193,6 +208,17 @@ export default function SavedLeads() {
           </div>
         )}
       </div>
+      
+      {dialogOpen && dialogConfig && (
+        <Dialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          title={dialogConfig.title}
+          message={dialogConfig.message}
+          onConfirm={dialogConfig.onConfirm}
+          variant={dialogConfig.variant}
+        />
+      )}
     </div>
   );
 }
