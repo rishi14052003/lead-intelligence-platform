@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
-	"lead-finder/configs"
+	"lead-finder/configs"	
 	"lead-finder/internal/api"
 	"lead-finder/internal/database"
 )

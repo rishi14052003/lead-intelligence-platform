@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:8080"
+const BASE_URL = "https://lead-intelligence-platform.onrender.com"
 
 export const searchLeads = async (query: string) => {
   const res = await fetch(`${BASE_URL}/search`, {

@@ -119,7 +119,7 @@ mongod
 go run cmd/main.go
 ```
 
-The server will start on `http://localhost:8080`
+The server will start on `https://lead-intelligence-platform.onrender.com`
 
 ## API Endpoints
 

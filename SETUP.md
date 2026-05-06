@@ -101,13 +101,13 @@ You should see:
 ```
 ✓ Connected to MongoDB successfully
 ✓ Database indexes created
-✓ Server running on http://localhost:8080
+✓ Server running on https://lead-intelligence-platform.onrender.com
 ```
 
 **Test the backend**:
 
 ```bash
-curl http://localhost:8080/health
+curl https://lead-intelligence-platform.onrender.com/health
 # Response: {"status": "ok"}
 ```
 
@@ -176,13 +176,13 @@ Click "Export" to download leads as CSV.
 ### Health Check
 
 ```bash
-curl http://localhost:8080/health
+curl https://lead-intelligence-platform.onrender.com/health
 ```
 
 ### Search
 
 ```bash
-curl -X POST http://localhost:8080/search \
+curl -X POST https://lead-intelligence-platform.onrender.com/search \
   -H "Content-Type: application/json" \
   -d '{"query": "tesla.com"}'
 ```
@@ -190,16 +190,16 @@ curl -X POST http://localhost:8080/search \
 ### Get Leads
 
 ```bash
-curl http://localhost:8080/leads
+curl https://lead-intelligence-platform.onrender.com/leads
 
 # Filter by role
-curl http://localhost:8080/leads?role=CEO
+curl https://lead-intelligence-platform.onrender.com/leads?role=CEO
 ```
 
 ### Export
 
 ```bash
-curl http://localhost:8080/export > leads.csv
+curl https://lead-intelligence-platform.onrender.com/export > leads.csv
 ```
 
 ## Development Workflow
