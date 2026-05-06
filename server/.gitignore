@@ -18,6 +18,10 @@ go.work
 # Dependency directories
 vendor/
 
+# Environment variables
+.env
+.env.local
+
 # IDE-specific files
 .idea/
 .vscode/
