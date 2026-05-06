@@ -1,17 +1,10 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import SearchPage from "../pages/Search";
-import Results from "../pages/Results";
-import Dashboard from "../pages/Dashboard";
-import SavedLeads from "../pages/SavedLeads";
-import History from "../pages/History";
-import Login from "../pages/Login";
-import Signup from "../pages/Signup";
-import ProfileSettings from "../pages/ProfileSettings";
-import ProtectedRoute from "../components/ProtectedRoute";
 import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, X, Moon, Sun } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import ProfileMenu from "../components/ProfileMenu";
+import ProtectedRoute from "./ProtectedRoute";
+import { publicRoutes, protectedRoutes, getDefaultRoute } from "./routeConfig";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -264,72 +257,36 @@ export default function AppRoutes() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        {/* Auth Routes */}
-        <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
-        <Route path="/signup" element={!isAuthenticated ? <Signup /> : <Navigate to="/dashboard" />} />
+        {/* Public Routes - redirect to dashboard if already authenticated */}
+        {publicRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={!isAuthenticated ? <route.element /> : <Navigate to="/dashboard" replace />}
+          />
+        ))}
 
-        {/* Protected Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/search"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <SearchPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/results"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Results />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/saved"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <SavedLeads />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <History />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile-settings"
-          element={
-            <ProtectedRoute>
-              <ProfileSettings />
-            </ProtectedRoute>
-          }
-        />
+        {/* Protected Routes - require authentication */}
+        {protectedRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={
+              <ProtectedRoute>
+                {route.layout ? (
+                  <Layout>
+                    <route.element />
+                  </Layout>
+                ) : (
+                  <route.element />
+                )}
+              </ProtectedRoute>
+            }
+          />
+        ))}
 
-        {/* Redirect */}
-        <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to={getDefaultRoute(isAuthenticated)} replace />} />
       </Routes>
     </BrowserRouter>
   );
