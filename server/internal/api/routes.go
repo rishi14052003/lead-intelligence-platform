@@ -22,16 +22,29 @@ func Routes() *chi.Mux {
 		w.Write([]byte(`{"status": "ok"}`))
 	})
 
-	// Search endpoint
-	r.Post("/search", SearchHandler)
+	// Auth endpoints (public)
+	r.Post("/auth/signup", SignupHandler)
+	r.Post("/auth/login", LoginHandler)
+	r.Post("/auth/logout", LogoutHandler)
 
-	// Leads endpoints
-	r.Get("/leads", GetLeadsHandler)
-	r.Delete("/leads", DeleteLeadHandler)
-	r.Post("/leads/save", SaveLeadsHandler)
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.AuthMiddleware)
 
-	// Export endpoint
-	r.Get("/export", ExportHandler)
+		// User endpoint
+		r.Get("/auth/user", GetUserHandler)
+
+		// Search endpoint
+		r.Post("/search", SearchHandler)
+
+		// Leads endpoints
+		r.Get("/leads", GetLeadsHandler)
+		r.Delete("/leads", DeleteLeadHandler)
+		r.Post("/leads/save", SaveLeadsHandler)
+
+		// Export endpoint
+		r.Get("/export", ExportHandler)
+	})
 
 	return r
 }
