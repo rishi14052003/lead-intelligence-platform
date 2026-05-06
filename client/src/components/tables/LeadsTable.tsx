@@ -22,6 +22,7 @@ export default function LeadsTable({ leads }: Props) {
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Role</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Email</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">LinkedIn</th>
+            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Company URL</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Score</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
           </tr>
@@ -54,6 +55,21 @@ export default function LeadsTable({ leads }: Props) {
                   >
                     <ExternalLink className="w-5 h-5 mr-2" />
                     Profile
+                  </a>
+                ) : (
+                  <span className="text-base text-gray-400">–</span>
+                )}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                {lead.companyUrl ? (
+                  <a 
+                    href={lead.companyUrl} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="text-base text-indigo-600 hover:text-indigo-900 flex items-center font-medium"
+                  >
+                    <ExternalLink className="w-5 h-5 mr-2" />
+                    Website
                   </a>
                 ) : (
                   <span className="text-base text-gray-400">–</span>

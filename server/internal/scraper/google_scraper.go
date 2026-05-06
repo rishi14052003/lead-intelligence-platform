@@ -30,22 +30,103 @@ func NewGoogleScraper() *GoogleScraper {
 	}
 }
 
-// SearchCEO searches for CEO information on Google
+// SearchLinkedInByRole searches for LinkedIn profiles by role via Google
+// Uses site:linkedin.com/in queries to find decision makers
+func (gs *GoogleScraper) SearchLinkedInByRole(company string, role string) ([]map[string]string, error) {
+	query := fmt.Sprintf("site:linkedin.com/in \"%s\" %s", company, role)
+	return gs.searchLinkedInProfiles(query)
+}
+
+// searchLinkedInProfiles searches for LinkedIn profiles and extracts URLs + snippets
+func (gs *GoogleScraper) searchLinkedInProfiles(query string) ([]map[string]string, error) {
+	encodedQuery := url.QueryEscape(query)
+	searchURL := fmt.Sprintf("https://www.google.com/search?q=%s", encodedQuery)
+
+	html, err := gs.FetchHTML(searchURL)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract LinkedIn URLs and snippet context from HTML
+	profiles := gs.extractLinkedInProfilesWithContext(html)
+	return profiles, nil
+}
+
+// extractLinkedInProfilesWithContext extracts LinkedIn URLs with their context snippets
+func (gs *GoogleScraper) extractLinkedInProfilesWithContext(html string) []map[string]string {
+	// Regex to find LinkedIn URLs
+	linkedinRegex := regexp.MustCompile(`https:\/\/www\.linkedin\.com\/in\/([a-zA-Z0-9\-]+)`)
+
+	var profiles []map[string]string
+	seen := make(map[string]bool)
+
+	matches := linkedinRegex.FindAllStringSubmatch(html, -1)
+	for _, match := range matches {
+		if len(match) >= 2 {
+			url := match[0]
+			username := match[1]
+
+			if !seen[url] {
+				seen[url] = true
+
+				// Extract context around the URL (title and snippet)
+				context := gs.extractContextAroundURL(html, url)
+
+				profiles = append(profiles, map[string]string{
+					"url":      url,
+					"username": username,
+					"context":  context,
+				})
+			}
+		}
+	}
+
+	return profiles
+}
+
+// extractContextAroundURL extracts title and snippet around a URL
+func (gs *GoogleScraper) extractContextAroundURL(html string, url string) string {
+	// Find the position of the URL
+	idx := strings.Index(html, url)
+	if idx == -1 {
+		return ""
+	}
+
+	// Extract context around the URL (500 chars before and after)
+	start := idx - 500
+	if start < 0 {
+		start = 0
+	}
+
+	end := idx + len(url) + 500
+	if end > len(html) {
+		end = len(html)
+	}
+
+	context := html[start:end]
+	// Remove HTML tags for readability
+	context = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(context, " ")
+	context = regexp.MustCompile(`\s+`).ReplaceAllString(context, " ")
+
+	return strings.TrimSpace(context)
+}
+
+// SearchCEO searches for CEO information on Google (legacy - kept for compatibility)
 func (gs *GoogleScraper) SearchCEO(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("%s CEO", domain))
 }
 
-// SearchCTO searches for CTO information on Google
+// SearchCTO searches for CTO information on Google (legacy - kept for compatibility)
 func (gs *GoogleScraper) SearchCTO(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("%s CTO", domain))
 }
 
-// SearchLeadership searches for leadership team information
+// SearchLeadership searches for leadership team information (legacy)
 func (gs *GoogleScraper) SearchLeadership(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("site:%s leadership team OR executive team OR management team", domain))
 }
 
-// SearchHR searches for HR information on Google
+// SearchHR searches for HR information on Google (legacy)
 func (gs *GoogleScraper) SearchHR(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("%s HR OR Human Resources OR Head of HR OR HR Director", domain))
 }

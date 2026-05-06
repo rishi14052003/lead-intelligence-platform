@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"lead-finder/internal/models"
@@ -74,8 +75,8 @@ func (as *ApolloService) SearchLeads(companyName string) ([]models.Lead, error) 
 		return []models.Lead{}, nil
 	}
 
-	// Search for executives (CEO, CTO, VP, Founder)
-	titles := []string{"CEO", "Chief Executive Officer", "CTO", "Chief Technology Officer", "VP", "Founder", "President"}
+	// Search for decision makers (CEO, CTO, HR)
+	titles := []string{"CEO", "Chief Executive Officer", "CTO", "Chief Technology Officer", "Head of HR", "HR Manager", "HR Director", "VP", "Founder", "President"}
 
 	req := ApolloSearchRequest{
 		Query:        companyName,
@@ -177,11 +178,24 @@ func (as *ApolloService) convertToLeads(contacts []ApolloContact) []models.Lead 
 			fullName = "Unknown"
 		}
 
+		// Skip leads with unknown or invalid names
+		if fullName == "Unknown" || strings.TrimSpace(fullName) == "" || len(fullName) < 2 {
+			continue
+		}
+
+		// Normalize role to our standardized roles (CEO, CTO, HR)
+		normalizedRole := as.normalizeRole(contact.Title)
+
+		// Only include leads with our target roles
+		if normalizedRole == "" {
+			continue
+		}
+
 		lead := models.Lead{
 			Name:       fullName,
 			Email:      contact.Email,
 			Phone:      contact.PhoneNumber,
-			Role:       contact.Title,
+			Role:       normalizedRole,
 			Company:    contact.Company.Name,
 			CompanyURL: contact.Company.Website,
 			LinkedIn:   contact.LinkedinURL,
@@ -189,7 +203,7 @@ func (as *ApolloService) convertToLeads(contacts []ApolloContact) []models.Lead 
 			UpdatedAt:  time.Now(),
 		}
 
-		// Calculate score based on data completeness
+		// Calculate score based on role and data completeness
 		score := 50 // Base score
 		if contact.Email != "" {
 			score += 20
@@ -200,12 +214,47 @@ func (as *ApolloService) convertToLeads(contacts []ApolloContact) []models.Lead 
 		if contact.LinkedinURL != "" {
 			score += 15
 		}
+
+		// Add role-based bonus
+		switch normalizedRole {
+		case "CEO":
+			score += 10
+		case "CTO":
+			score += 8
+		case "HR":
+			score += 5
+		}
+
 		lead.Score = score
 
 		leads = append(leads, lead)
 	}
 
 	return leads
+}
+
+// normalizeRole maps various title formats to our standardized roles (CEO, CTO, HR)
+// Returns empty string if role doesn't match our target roles
+func (as *ApolloService) normalizeRole(title string) string {
+	titleLower := strings.ToLower(title)
+
+	// CEO variants
+	if strings.Contains(titleLower, "ceo") || strings.Contains(titleLower, "chief executive") || strings.Contains(titleLower, "founder") || strings.Contains(titleLower, "president") {
+		return "CEO"
+	}
+
+	// CTO variants
+	if strings.Contains(titleLower, "cto") || strings.Contains(titleLower, "chief technology") {
+		return "CTO"
+	}
+
+	// HR variants
+	if strings.Contains(titleLower, "hr") || strings.Contains(titleLower, "human resources") || strings.Contains(titleLower, "head of hr") || strings.Contains(titleLower, "hr director") || strings.Contains(titleLower, "hr manager") {
+		return "HR"
+	}
+
+	// Not a target role
+	return ""
 }
 
 // GetLeadsCount returns the estimated count for a search query

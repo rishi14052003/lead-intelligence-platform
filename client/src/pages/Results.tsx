@@ -115,7 +115,7 @@ export default function Results() {
     setCurrentPage(1);
   }, [filter, leads.length]);
   
-  const roles = ["All", "CEO", "CTO", "VP of Sales", "Head of HR", "Engineering Manager"];
+  const roles = ["All", "CEO", "CTO", "HR"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
 
   // Calculate pagination
@@ -295,7 +295,6 @@ export default function Results() {
                     <tr key={i} onClick={() => toggleLeadSelection(i)} style={{ cursor: "pointer" }}>
                       <td>
                         <div className="lead-name">{sanitizeName(lead.name)}</div>
-                        <div className="lead-role">{lead.role}</div>
                       </td>
                       <td><span className="badge badge-purple">{lead.role}</span></td>
                       <td>

@@ -93,8 +93,8 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		log.Println("📡 Searching Apollo.io API...")
 		apolloLeads, err := ls.apolloService.SearchLeads(companyName)
 		if err != nil {
-			log.Printf("⚠️ Apollo API error: %v - falling back to legacy scraping", err)
-			// Continue with legacy scraping as fallback
+			log.Printf("⚠️ Apollo API error: %v - falling back to LinkedIn extraction", err)
+			// Continue with LinkedIn extraction as fallback
 		} else if len(apolloLeads) > 0 {
 			log.Printf("✓ Apollo API returned %d leads", len(apolloLeads))
 
@@ -112,136 +112,126 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		}
 	}
 
-	// Legacy scraping fallback if Apollo not available or returned no results
-	log.Println("📋 Using legacy scraper methods...")
-	leadsMap := make(map[string]*models.Lead)
-
-	// Step 1: Scrape website
-	log.Println("  Step 1: Scraping website...")
-	websiteEmails, scrapedURL, _ := ls.webScraper.ScrapeEmails(domain)
-	websiteNames, _, _ := ls.webScraper.ExtractNames(domain)
-	contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
+	// LinkedIn extraction via Google search (primary method)
+	log.Println("🔍 Using LinkedIn extraction via Google search...")
+	log.Println("  Step 1: Searching for decision makers on LinkedIn...")
 
 	// Use scraped URL if available, otherwise generate one
-	companyURL := scrapedURL
-	if companyURL == "" {
-		companyURL = fmt.Sprintf("https://%s", utils.FormatDomain(domain))
-	}
+	companyURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
 
-	allEmails := append(websiteEmails, contactPageEmails...)
-	allEmails = deduplicateStrings(allEmails)
+	roles := []string{"CEO", "CTO", "HR"}
+	leadsMap := make(map[string]*models.Lead)
 
-	// Step 2: Search for executives
-	log.Println("  Step 2: Searching for executives...")
-	ceoNames, _ := ls.googleScraper.SearchCEO(domain)
-	ctoNames, _ := ls.googleScraper.SearchCTO(domain)
-	hrNames, _ := ls.googleScraper.SearchHR(domain)
-	leadershipNames, _ := ls.googleScraper.SearchLeadership(domain)
+	for _, role := range roles {
+		log.Printf("  - Searching for %s profiles...", role)
 
-	// Track names with their roles
-	nameRoles := make(map[string]string)
-	for _, name := range ceoNames {
-		nameRoles[name] = "CEO"
-	}
-	for _, name := range ctoNames {
-		nameRoles[name] = "CTO"
-	}
-	for _, name := range hrNames {
-		nameRoles[name] = "HR"
-	}
-	for _, name := range leadershipNames {
-		if _, exists := nameRoles[name]; !exists {
-			nameRoles[name] = "Leadership"
-		}
-	}
-
-	allNames := append(websiteNames, ceoNames...)
-	allNames = append(allNames, ctoNames...)
-	allNames = append(allNames, hrNames...)
-	allNames = append(allNames, leadershipNames...)
-	allNames = deduplicateStrings(allNames)
-
-	// Step 3: Create leads from emails
-	for _, email := range allEmails {
-		if email == "" || len(leadsMap) >= ls.maxLeads {
-			break
-		}
-
-		if _, exists := leadsMap[email]; exists {
+		// Search LinkedIn profiles for this role with company validation
+		profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+		if err != nil {
+			log.Printf("    ⚠️ Error searching for %s: %v", role, err)
 			continue
 		}
 
-		// Try to extract name from email
-		name := ls.linkedinParser.ExtractNameFromEmail(email)
+		log.Printf("    ✓ Found %d validated %s profiles", len(profiles), role)
 
-		lead := &models.Lead{
-			Email:      email,
-			Name:       name,
-			Role:       nameRoles[name], // Assign role if name matches
-			Company:    utils.FormatCompanyName(domain),
-			CompanyURL: companyURL,
-			SearchID:   searchID.(primitive.ObjectID),
-			CreatedAt:  time.Now(),
-			UpdatedAt:  time.Now(),
-		}
+		// Create leads from profiles
+		for _, profile := range profiles {
+			name := profile["name"]
+			linkedinURL := profile["url"]
 
-		leadsMap[email] = lead
-	}
+			// Skip leads with unknown or invalid names
+			if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
+				log.Printf("    ⚠️ Skipping profile with invalid name: %s", name)
+				continue
+			}
 
-	// Step 4: Create leads from names
-	for _, name := range allNames {
-		if name == "" || len(leadsMap) >= ls.maxLeads {
-			break
-		}
+			// Use name as key to avoid duplicates
+			key := strings.ToLower(name)
 
-		email := ls.findEmailForName(name, allEmails)
-
-		lead := &models.Lead{
-			Name:       name,
-			Email:      email,
-			Role:       nameRoles[name], // Assign role from search
-			Company:    utils.FormatCompanyName(domain),
-			CompanyURL: companyURL,
-			SearchID:   searchID.(primitive.ObjectID),
-			CreatedAt:  time.Now(),
-			UpdatedAt:  time.Now(),
-		}
-
-		key := email
-		if key == "" {
-			key = name
-		}
-
-		if _, exists := leadsMap[key]; !exists {
-			leadsMap[key] = lead
-		}
-	}
-
-	// Step 5: Enrich with LinkedIn
-	log.Println("  Step 3: Enriching with LinkedIn profiles...")
-	for _, lead := range leadsMap {
-		linkedinProfiles, _ := ls.linkedinParser.SearchProfiles(domain, lead.Role)
-		if len(linkedinProfiles) > 0 {
-			for _, profile := range linkedinProfiles {
-				if ls.linkedinParser.MatchNameWithLinkedIn(lead.Name, profile) {
-					lead.LinkedIn = profile
-					break
+			if _, exists := leadsMap[key]; !exists {
+				lead := &models.Lead{
+					Name:       name,
+					Role:       role,
+					LinkedIn:   linkedinURL,
+					Company:    utils.FormatCompanyName(domain),
+					CompanyURL: companyURL,
+					SearchID:   searchID.(primitive.ObjectID),
+					Score:      ls.scoreByRole(role),
+					CreatedAt:  time.Now(),
+					UpdatedAt:  time.Now(),
 				}
+
+				leadsMap[key] = lead
 			}
 		}
-
-		lead.Role = ls.inferRole(lead)
-		lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", lead.Email != "")
-		leads = append(leads, *lead)
 	}
 
-	if len(leads) > ls.maxLeads {
-		leads = leads[:ls.maxLeads]
+	// Step 2: Fallback to basic website scraping if no LinkedIn results
+	if len(leadsMap) == 0 {
+		log.Println("  Step 2: No LinkedIn results found, falling back to website scraping...")
+
+		websiteEmails, _, _ := ls.webScraper.ScrapeEmails(domain)
+		contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
+
+		allEmails := append(websiteEmails, contactPageEmails...)
+		allEmails = deduplicateStrings(allEmails)
+
+		for _, email := range allEmails {
+			if email == "" || len(leadsMap) >= 10 {
+				break
+			}
+
+			name := ls.linkedinParser.ExtractNameFromEmail(email)
+			if name == "" || strings.ToLower(name) == "unknown" {
+				continue
+			}
+
+			// Try to infer role from email
+			inferredRole := ls.inferRole(&models.Lead{Email: email, Name: name})
+			
+			// Only add if role matches our target roles
+			if inferredRole != "CEO" && inferredRole != "CTO" && inferredRole != "HR" && inferredRole != "HR Manager" {
+				log.Printf("    ⚠️ Skipping email %s - role %s not in target roles", email, inferredRole)
+				continue
+			}
+
+			// Normalize role
+			if inferredRole == "HR Manager" {
+				inferredRole = "HR"
+			}
+
+			key := strings.ToLower(email)
+			if _, exists := leadsMap[key]; !exists {
+				lead := &models.Lead{
+					Name:       name,
+					Email:      email,
+					Role:       inferredRole,
+					Company:    utils.FormatCompanyName(domain),
+					CompanyURL: companyURL,
+					SearchID:   searchID.(primitive.ObjectID),
+					Score:      60,
+					CreatedAt:  time.Now(),
+					UpdatedAt:  time.Now(),
+				}
+
+				leadsMap[key] = lead
+			}
+		}
+	}
+
+	// Convert map to slice and filter out invalid leads
+	for _, lead := range leadsMap {
+		// Final validation - skip unknown or invalid roles
+		if strings.ToLower(lead.Name) == "unknown" || lead.Role == "Unknown" || lead.Role == "Executive" || lead.Role == "" {
+			log.Printf("    ⚠️ Skipping invalid lead: %s (role: %s)", lead.Name, lead.Role)
+			continue
+		}
+		leads = append(leads, *lead)
 	}
 
 	ls.updateSearchResults(ctx, searchID, len(leads))
 
-	log.Printf("✅ Search completed via legacy scraper. Found %d leads", len(leads))
+	log.Printf("✅ Search completed via LinkedIn extraction. Found %d leads", len(leads))
 	return leads, nil
 }
 
@@ -404,6 +394,28 @@ func (ls *LeadService) inferRole(lead *models.Lead) string {
 
 	// Default role
 	return "Executive"
+}
+
+// scoreByRole returns the score for a role
+func (ls *LeadService) scoreByRole(role string) int {
+	switch strings.ToUpper(role) {
+	case "CEO":
+		return 95
+	case "CTO":
+		return 90
+	case "HR":
+		return 80
+	case "FOUNDER":
+		return 95
+	case "PRESIDENT":
+		return 90
+	case "VP":
+		return 85
+	case "DIRECTOR":
+		return 80
+	default:
+		return 70
+	}
 }
 
 func deduplicateStrings(slice []string) []string {

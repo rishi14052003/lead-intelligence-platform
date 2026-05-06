@@ -1,7 +1,7 @@
 import { useLeadStore } from "../../store/leadStore";
 import { ChevronDown } from "lucide-react";
 
-const ROLES = ["All", "CEO", "CTO", "CFO", "COO", "CMO", "HR Manager", "Sales Manager", "Product Manager", "Engineering Manager"];
+const ROLES = ["All", "CEO", "CTO", "HR"];
 
 export default function RoleFilter() {
   const roleFilter = useLeadStore((s) => s.roleFilter);

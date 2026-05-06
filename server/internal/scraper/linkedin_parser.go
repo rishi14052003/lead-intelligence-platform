@@ -3,6 +3,7 @@ package scraper
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"lead-finder/internal/utils"
@@ -163,4 +164,89 @@ func (lp *LinkedInParser) SanitizeLinkedInURL(url string) string {
 	}
 
 	return url
+}
+
+// ParseNameFromLinkedInURL extracts name from LinkedIn URL
+// Example: linkedin.com/in/john-doe-123 → "John Doe"
+func (lp *LinkedInParser) ParseNameFromLinkedInURL(profileURL string) string {
+	if profileURL == "" {
+		return ""
+	}
+
+	// Extract username using existing function
+	username := lp.ExtractUsernameFromURL(profileURL)
+	if username == "" {
+		return ""
+	}
+
+	// Convert: john-doe-123 → john doe
+	// 1. Replace hyphens with spaces
+	name := strings.ReplaceAll(username, "-", " ")
+
+	// 2. Remove numbers and special characters
+	reg := regexp.MustCompile(`[0-9]+`)
+	name = reg.ReplaceAllString(name, "")
+
+	// 3. Clean extra spaces
+	name = strings.Join(strings.Fields(name), " ")
+
+	// 4. Capitalize each word
+	name = utils.FormatLeadName(name)
+
+	return strings.TrimSpace(name)
+}
+
+// ValidateCompanyInContext checks if company name appears in search context
+// Returns true if company name is found in the snippet/title
+func (lp *LinkedInParser) ValidateCompanyInContext(company string, context string) bool {
+	if company == "" || context == "" {
+		return false
+	}
+
+	// Normalize both for comparison
+	company = strings.ToLower(strings.TrimSpace(company))
+	context = strings.ToLower(context)
+
+	// Check if company name appears in context
+	return strings.Contains(context, company)
+}
+
+// SearchLinkedInByRoleWithValidation searches for LinkedIn profiles and validates company
+// Returns profiles with name and URL
+func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, role string) ([]map[string]string, error) {
+	profiles, err := lp.googleScraper.SearchLinkedInByRole(company, role)
+	if err != nil {
+		return nil, err
+	}
+
+	var validatedProfiles []map[string]string
+
+	for _, profile := range profiles {
+		url := profile["url"]
+		context := profile["context"]
+
+		// Validate company presence
+		if !lp.ValidateCompanyInContext(company, context) {
+			continue
+		}
+
+		// Parse name from URL
+		name := lp.ParseNameFromLinkedInURL(url)
+		if name == "" {
+			continue
+		}
+
+		validatedProfiles = append(validatedProfiles, map[string]string{
+			"name": name,
+			"url":  url,
+			"role": role,
+		})
+
+		// Limit to 3 results per role
+		if len(validatedProfiles) >= 3 {
+			break
+		}
+	}
+
+	return validatedProfiles, nil
 }
