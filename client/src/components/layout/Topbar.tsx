@@ -1,11 +1,13 @@
 import { useLeadStore } from "../../store/leadStore";
-import { Bell, Loader2, Sun, Moon, Settings, RefreshCw } from "lucide-react";
+import { Bell, Loader2, Sun, Moon, Settings, LogOut } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
+import { useAuthStore } from "../../store/authStore";
 import ProfileMenu from "../ProfileMenu";
 
 export default function Topbar() {
   const { loading } = useLeadStore();
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuthStore();
 
   return (
     <>
@@ -41,8 +43,8 @@ export default function Topbar() {
               <Settings size={24} />
             </button>
 
-            <button className="topbar-icon-btn" title="Refresh">
-              <RefreshCw size={24} />
+            <button className="topbar-icon-btn" title="Sign Out" onClick={logout}>
+              <LogOut size={24} />
             </button>
 
             {/* Divider */}

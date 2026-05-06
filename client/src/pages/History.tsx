@@ -63,6 +63,8 @@ export default function History() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(4);
   const [companiesPage, setCompaniesPage] = useState(1);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [showAllCompanies, setShowAllCompanies] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogConfig, setDialogConfig] = useState<{
     title: string;
@@ -77,10 +79,10 @@ export default function History() {
   }, [loadFromLocalStorage]);
 
   // Calculate pagination
-  const totalPages = Math.ceil(history.length / itemsPerPage);
+  const totalPages = showAllHistory ? Math.ceil(history.length / itemsPerPage) : 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const displayHistory = history.slice(startIndex, endIndex);
+  const displayHistory = showAllHistory ? history.slice(startIndex, endIndex) : history.slice(0, 4);
 
   // Calculate top companies by lead count
   const topCompanies = history.reduce((acc: { company: string; leads: number }[], h) => {
@@ -95,10 +97,10 @@ export default function History() {
 
   // Calculate pagination for top companies
   const companiesPerPage = 4;
-  const totalCompanyPages = Math.ceil(topCompanies.length / companiesPerPage);
+  const totalCompanyPages = showAllCompanies ? Math.ceil(topCompanies.length / companiesPerPage) : 1;
   const companyStartIndex = (companiesPage - 1) * companiesPerPage;
   const companyEndIndex = companyStartIndex + companiesPerPage;
-  const displayCompanies = topCompanies.slice(companyStartIndex, companyEndIndex);
+  const displayCompanies = showAllCompanies ? topCompanies.slice(companyStartIndex, companyEndIndex) : topCompanies.slice(0, 4);
 
   // Reset to page 1 when history changes
   useEffect(() => {
@@ -193,7 +195,7 @@ export default function History() {
                 />
               ) : (
                 <>
-                  <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0 }}>
+                  <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0, minHeight: "300px" }}>
                     {displayHistory.map((h, i) => (
                       <div key={h.id} className="history-item" onClick={() => { navigate("/results"); toggleHistorySelection(i); }} style={{ cursor: "pointer" }}>
                         <div className="history-left">
@@ -222,27 +224,45 @@ export default function History() {
                       </div>
                     ))}
                   </div>
-                  {totalPages > 1 && (
-                    <div className="pagination">
-                      <span>Showing {startIndex + 1}-{Math.min(endIndex, history.length)} of {history.length} searches</span>
-                      <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-                        <button 
-                          className="btn btn-secondary btn-sm" 
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={currentPage === 1}
-                        >
-                          Prev
-                        </button>
-                        <button 
-                          className="btn btn-secondary btn-sm" 
-                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                          disabled={currentPage === totalPages}
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 12 }}>
+                    {showAllHistory && totalPages > 1 ? (
+                      <>
+                        <span style={{ fontSize: 12, color: "#888" }}>Showing {startIndex + 1}-{Math.min(endIndex, history.length)} of {history.length} searches</span>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                          >
+                            Prev
+                          </button>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => { setShowAllHistory(true); setCurrentPage(1); }}
+                        disabled={history.length <= 4}
+                      >
+                        View All
+                      </button>
+                    )}
+                    {showAllHistory && (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => { setShowAllHistory(false); setCurrentPage(1); }}
+                      >
+                        Show Less
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -267,7 +287,7 @@ export default function History() {
                 />
               ) : (
                 <>
-                  <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0 }}>
+                  <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0, minHeight: "300px" }}>
                     {displayCompanies.map((c, i) => (
                       <div key={i} className="history-item" style={{ cursor: "default" }}>
                         <div className="history-left">
@@ -285,27 +305,45 @@ export default function History() {
                       </div>
                     ))}
                   </div>
-                  {totalCompanyPages > 1 && (
-                    <div className="pagination">
-                      <span>Showing {companyStartIndex + 1}-{Math.min(companyEndIndex, topCompanies.length)} of {topCompanies.length} companies</span>
-                      <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-                        <button 
-                          className="btn btn-secondary btn-sm" 
-                          onClick={() => setCompaniesPage(p => Math.max(1, p - 1))}
-                          disabled={companiesPage === 1}
-                        >
-                          Prev
-                        </button>
-                        <button 
-                          className="btn btn-secondary btn-sm" 
-                          onClick={() => setCompaniesPage(p => Math.min(totalCompanyPages, p + 1))}
-                          disabled={companiesPage === totalCompanyPages}
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 12 }}>
+                    {showAllCompanies && totalCompanyPages > 1 ? (
+                      <>
+                        <span style={{ fontSize: 12, color: "#888" }}>Showing {companyStartIndex + 1}-{Math.min(companyEndIndex, topCompanies.length)} of {topCompanies.length} companies</span>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            onClick={() => setCompaniesPage(p => Math.max(1, p - 1))}
+                            disabled={companiesPage === 1}
+                          >
+                            Prev
+                          </button>
+                          <button 
+                            className="btn btn-secondary btn-sm" 
+                            onClick={() => setCompaniesPage(p => Math.min(totalCompanyPages, p + 1))}
+                            disabled={companiesPage === totalCompanyPages}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => { setShowAllCompanies(true); setCompaniesPage(1); }}
+                        disabled={topCompanies.length <= 4}
+                      >
+                        View All
+                      </button>
+                    )}
+                    {showAllCompanies && (
+                      <button 
+                        className="btn btn-secondary btn-sm" 
+                        onClick={() => { setShowAllCompanies(false); setCompaniesPage(1); }}
+                      >
+                        Show Less
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
