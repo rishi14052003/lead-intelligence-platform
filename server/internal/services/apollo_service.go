@@ -93,7 +93,7 @@ func (as *ApolloService) SearchLeads(companyName string) ([]models.Lead, error) 
 	}
 
 	// Convert Apollo contacts to models.Lead
-	leads := as.convertToLeads(resp.Contacts, companyName)
+	leads := as.convertToLeads(resp.Contacts)
 	log.Printf("✓ Found %d leads from Apollo", len(leads))
 
 	return leads, nil
@@ -156,7 +156,7 @@ func (as *ApolloService) searchAPI(req ApolloSearchRequest) (*ApolloSearchRespon
 }
 
 // convertToLeads converts Apollo contacts to our Lead model
-func (as *ApolloService) convertToLeads(contacts []ApolloContact, companyName string) []models.Lead {
+func (as *ApolloService) convertToLeads(contacts []ApolloContact) []models.Lead {
 	var leads []models.Lead
 	seenEmails := make(map[string]bool)
 
