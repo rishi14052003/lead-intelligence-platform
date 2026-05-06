@@ -80,8 +80,8 @@ func (as *ApolloService) SearchLeads(companyName string) ([]models.Lead, error) 
 	req := ApolloSearchRequest{
 		Query:        companyName,
 		PersonTitles: titles,
-		Limit:        10,
-		PageSize:     10,
+		Limit:        50,
+		PageSize:     50,
 	}
 
 	log.Printf("🔍 Searching Apollo for: %s with titles: %v", companyName, titles)

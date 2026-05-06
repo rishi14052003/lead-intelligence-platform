@@ -67,15 +67,34 @@ func createIndexes(database *mongo.Database) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Leads collection indexes
-	leadsCollection := database.Collection("leads")
-	leadsIndexModel := mongo.IndexModel{
+	// Users collection indexes
+	usersCollection := database.Collection("users")
+	usersIndexModel := mongo.IndexModel{
 		Keys:    map[string]int{"email": 1},
 		Options: options.Index().SetUnique(true),
 	}
-	_, err := leadsCollection.Indexes().CreateOne(ctx, leadsIndexModel)
+	_, err := usersCollection.Indexes().CreateOne(ctx, usersIndexModel)
 	if err != nil {
-		log.Printf("Warning: Could not create email index: %v", err)
+		log.Printf("Warning: Could not create email index on users: %v", err)
+	}
+
+	// Leads collection indexes
+	leadsCollection := database.Collection("leads")
+	leadsEmailIndexModel := mongo.IndexModel{
+		Keys:    map[string]int{"email": 1},
+		Options: options.Index().SetUnique(false),
+	}
+	_, err = leadsCollection.Indexes().CreateOne(ctx, leadsEmailIndexModel)
+	if err != nil {
+		log.Printf("Warning: Could not create email index on leads: %v", err)
+	}
+
+	leadsUserIndexModel := mongo.IndexModel{
+		Keys: map[string]int{"userId": 1},
+	}
+	_, err = leadsCollection.Indexes().CreateOne(ctx, leadsUserIndexModel)
+	if err != nil {
+		log.Printf("Warning: Could not create userId index on leads: %v", err)
 	}
 
 	// Searches collection indexes

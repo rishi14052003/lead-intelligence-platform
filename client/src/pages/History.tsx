@@ -151,8 +151,8 @@ export default function History() {
       {/* Main Content Grid */}
       <div className="row" style={{ gap: 14 }}>
         {/* Recent Searches */}
-        <div className="col-6" style={{ flex: 2 }}>
-          <div className="card" style={{ marginBottom: 14, display: "flex", flexDirection: "column" }}>
+        <div className="col-6" style={{ display: "flex", flexDirection: "column", flex: "0 0 70%" }}>
+          <div className="card" style={{ marginBottom: 0, display: "flex", flexDirection: "column", flex: 1 }}>
             <div className="card-header">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Clock size={19} />
@@ -231,38 +231,15 @@ export default function History() {
         </div>
 
         {/* Side Column */}
-        <div className="col-6" style={{ flex: 1 }}>
-          {/* Search Analytics */}
-          <div className="card" style={{ marginBottom: 14, height: "250px" }}>
-            <div className="card-header">
-              <span className="card-title">Search Analytics</span>
-            </div>
-            <div className="card-body">
-              <div className="analytics-grid">
-                <div className="analytics-item">
-                  <div className="analytics-label">Most Searched</div>
-                  <div className="analytics-value">-</div>
-                </div>
-                <div className="analytics-item">
-                  <div className="analytics-label">Avg. Response Time</div>
-                  <div className="analytics-value">-</div>
-                </div>
-                <div className="analytics-item">
-                  <div className="analytics-label">Success Rate</div>
-                  <div className="analytics-value">-</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="col-6" style={{ display: "flex", flexDirection: "column", flex: "0 0 30%" }}>
           {/* Search Tips */}
-          <div className="card" style={{ marginBottom: 14, height: "250px" }}>
+          <div className="card" style={{ marginBottom: 0, display: "flex", flexDirection: "column", flex: 1 }}>
             <div className="card-header">
               <span className="card-title">Search Tips</span>
             </div>
-            <div className="card-body">
-              <div className="tips-list">
-                <div className="tip-item">
+            <div className="card-body" style={{ flex: 1, justifyContent: "center" }}>
+              <div className="tips-list" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div className="tip-item" style={{ flex: 1, display: "flex", alignItems: "center" }}>
                   <div className="tip-icon-wrapper" style={{ background: "rgba(108,99,255,0.15)", color: "var(--accent2)" }}>
                     <Search size={19} />
                   </div>
@@ -271,7 +248,7 @@ export default function History() {
                     <div className="tip-desc">Use exact company domains</div>
                   </div>
                 </div>
-                <div className="tip-item">
+                <div className="tip-item" style={{ flex: 1, display: "flex", alignItems: "center" }}>
                   <div className="tip-icon-wrapper" style={{ background: "rgba(16,185,129,0.15)", color: "var(--green)" }}>
                     <Bookmark size={19} />
                   </div>
@@ -280,7 +257,7 @@ export default function History() {
                     <div className="tip-desc">Build your lead database</div>
                   </div>
                 </div>
-                <div className="tip-item">
+                <div className="tip-item" style={{ flex: 1, display: "flex", alignItems: "center" }}>
                   <div className="tip-icon-wrapper" style={{ background: "rgba(245,158,11,0.15)", color: "var(--yellow)" }}>
                     <Clock size={19} />
                   </div>
@@ -292,8 +269,7 @@ export default function History() {
               </div>
             </div>
           </div>
-
-                  </div>
+        </div>
       </div>
       
       {dialogOpen && dialogConfig && (

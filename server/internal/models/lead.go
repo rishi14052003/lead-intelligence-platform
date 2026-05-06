@@ -8,6 +8,7 @@ import (
 
 type Lead struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"userId" json:"userId"`
 	Name       string             `bson:"name" json:"name"`
 	Role       string             `bson:"role" json:"role"`
 	Email      string             `bson:"email" json:"email"`
@@ -25,5 +26,8 @@ type User struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Email     string             `bson:"email" json:"email"`
 	Password  string             `bson:"password" json:"-"`
+	FirstName string             `bson:"firstName" json:"firstName"`
+	LastName  string             `bson:"lastName" json:"lastName"`
 	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
 }

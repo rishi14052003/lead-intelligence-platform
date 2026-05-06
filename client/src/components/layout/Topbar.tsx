@@ -1,6 +1,7 @@
 import { useLeadStore } from "../../store/leadStore";
-import { Bell, Loader2, Sun, Moon, Settings, RefreshCw, User } from "lucide-react";
+import { Bell, Loader2, Sun, Moon, Settings, RefreshCw } from "lucide-react";
 import { useTheme } from "../../hooks/useTheme";
+import ProfileMenu from "../ProfileMenu";
 
 export default function Topbar() {
   const { loading } = useLeadStore();
@@ -47,10 +48,8 @@ export default function Topbar() {
             {/* Divider */}
             <div className="topbar-sep" />
 
-            {/* Avatar */}
-            <div className="topbar-avatar" title="Account">
-              <User size={24} />
-            </div>
+            {/* Profile Menu */}
+            <ProfileMenu />
           </div>
 
         </div>

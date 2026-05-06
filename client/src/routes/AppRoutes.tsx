@@ -1,11 +1,17 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import SearchPage from "../pages/Search";
 import Results from "../pages/Results";
 import Dashboard from "../pages/Dashboard";
 import SavedLeads from "../pages/SavedLeads";
 import History from "../pages/History";
-import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun, User } from "lucide-react";
+import Login from "../pages/Login";
+import Signup from "../pages/Signup";
+import ProfileSettings from "../pages/ProfileSettings";
+import ProtectedRoute from "../components/ProtectedRoute";
+import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun } from "lucide-react";
+import { useAuthStore } from "../store/authStore";
+import ProfileMenu from "../components/ProfileMenu";
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -16,8 +22,9 @@ const NAV_ITEMS = [
 ];
 
 function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavigate: (page: string) => void }) {
-  const userName = "User";
-  const userAvatarLetter = (userName.trim()[0] || "U").toUpperCase();
+  const { user } = useAuthStore();
+  const userFirstName = user?.firstName || "User";
+  const userAvatarLetter = (userFirstName.trim()[0] || "U").toUpperCase();
 
   return (
     <div className="sidebar">
@@ -48,7 +55,7 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
         <div className="user-card">
           <div className="user-avatar">{userAvatarLetter}</div>
           <div>
-            <div className="user-name">{userName}</div>
+            <div className="user-name">{userFirstName}</div>
           </div>
         </div>
       </div>
@@ -103,10 +110,7 @@ function DarkTopbar({
         <button className="icon-btn" title="Refresh">
           <RefreshCw size={24} />
         </button>
-        <div className="topbar-right-sep" />
-        <button className="icon-btn topbar-avatar" title="Account">
-          <User size={24} />
-        </button>
+        <ProfileMenu />
       </div>
     </div>
   );
@@ -241,7 +245,7 @@ function Layout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <div className="settings-item" onClick={() => { setShowSettings(false); }}>
+            <div className="settings-item" onClick={() => { setShowSettings(false); navigate("/profile-settings"); }}>
               <div className="settings-icon">
                 <Users size={16} />
               </div>
@@ -258,18 +262,80 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppRoutes() {
+  const { isAuthenticated } = useAuthStore();
+
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/results" element={<Results />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/saved" element={<SavedLeads />} />
-          <Route path="/history" element={<History />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        {/* Auth Routes */}
+        <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
+        <Route path="/signup" element={!isAuthenticated ? <Signup /> : <Navigate to="/dashboard" />} />
+
+        {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/search"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SearchPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/results"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Results />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/saved"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SavedLeads />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <History />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile-settings"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProfileSettings />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect */}
+        <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
+      </Routes>
     </BrowserRouter>
   );
 }

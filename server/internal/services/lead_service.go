@@ -39,7 +39,7 @@ func NewLeadService(db *database.Database) *LeadService {
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
 		apolloService:  nil, // Will be initialized with API key in main
-		maxLeads:       10,
+		maxLeads:       50,
 	}
 }
 

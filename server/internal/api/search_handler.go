@@ -28,6 +28,14 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	// Get userID from context
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Unauthorized"})
+		return
+	}
+
 	var req SearchRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -48,7 +56,7 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Search request: %s", req.Query)
+	log.Printf("Search request from user %s: %s", userID, req.Query)
 
 	// Get database and create lead service
 	db := database.Get()

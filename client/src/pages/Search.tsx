@@ -48,7 +48,7 @@ export default function SearchPage() {
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { search, loading, leads } = useLeadStore();
+  const { search, loading } = useLeadStore();
   const { addHistory } = useHistoryStore();
 
   useEffect(() => {
@@ -65,13 +65,13 @@ export default function SearchPage() {
     }
     setError("");
     try {
-      await search(trimmed);
+      const searchResults = await search(trimmed);
       addHistory({
         id: Date.now().toString(),
         domain: trimmed,
         date: new Date().toLocaleDateString(),
-        leadsFound: leads.length,
-        leads: leads,
+        leadsFound: searchResults.length,
+        leads: searchResults,
       });
       navigate("/results");
     } catch {
