@@ -1,4 +1,3 @@
-import { lazy } from 'react';
 import SearchPage from '../pages/Search';
 import Results from '../pages/Results';
 import Dashboard from '../pages/Dashboard';
