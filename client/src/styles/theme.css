@@ -301,7 +301,7 @@ html, body, #root { height: 100%; background: var(--bg); }
   flex-shrink: 0;
 }
 
-.user-name { font-size: 24px; font-weight: 500; color: var(--text2); }
+.user-name { font-size: 21px; font-weight: 500; color: var(--text2); }
 .user-role { font-size: 10px; color: var(--text2); }
 
 /* Topbar */

@@ -51,7 +51,7 @@ export default function ProfileSettings() {
 
         .ps-title {
           font-family: 'Syne', sans-serif;
-          font-size: 32px;
+          font-size: 29px;
           font-weight: 800;
           color: #ffffff;
           margin: 0;
@@ -84,14 +84,14 @@ export default function ProfileSettings() {
           align-items: center;
           justify-content: center;
           font-family: 'Syne', sans-serif;
-          font-size: 32px;
+          font-size: 29px;
           font-weight: 800;
           color: #ffffff;
         }
 
         .ps-avatar-name {
           font-family: 'Syne', sans-serif;
-          font-size: 24px;
+          font-size: 21px;
           font-weight: 700;
           color: #ffffff;
         }
@@ -123,7 +123,7 @@ export default function ProfileSettings() {
         }
 
         .ps-info-label {
-          font-size: 11px;
+          font-size: 8px;
           font-weight: 600;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -133,7 +133,7 @@ export default function ProfileSettings() {
         }
 
         .ps-info-value {
-          font-size: 15px;
+          font-size: 12px;
           color: #ffffff;
           font-family: 'DM Sans', sans-serif;
           font-weight: 500;
@@ -156,7 +156,7 @@ export default function ProfileSettings() {
             <div className="ps-avatar-section">
               <div className="ps-avatar">{userInitial}</div>
               <div className="ps-avatar-name">
-                {user?.firstName} {user?.lastName || ""}
+                {user?.firstName ? `${user.firstName} ${user?.lastName || ""}` : "User"}
               </div>
             </div>
 
@@ -168,7 +168,7 @@ export default function ProfileSettings() {
               <div className="ps-info-content">
                 <div className="ps-info-label">Full Name</div>
                 <div className="ps-info-value">
-                  {user?.firstName} {user?.lastName || ""}
+                  {user?.firstName ? `${user.firstName} ${user?.lastName || ""}` : "Not available"}
                 </div>
               </div>
             </div>
@@ -180,7 +180,7 @@ export default function ProfileSettings() {
               </div>
               <div className="ps-info-content">
                 <div className="ps-info-label">Email Address</div>
-                <div className="ps-info-value">{user?.email}</div>
+                <div className="ps-info-value">{user?.email || "Not available"}</div>
               </div>
             </div>
           </div>

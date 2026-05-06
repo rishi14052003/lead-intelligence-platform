@@ -9,7 +9,7 @@ import Login from "../pages/Login";
 import Signup from "../pages/Signup";
 import ProfileSettings from "../pages/ProfileSettings";
 import ProtectedRoute from "../components/ProtectedRoute";
-import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, RefreshCw, X, Moon, Sun } from "lucide-react";
+import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, X, Moon, Sun } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import ProfileMenu from "../components/ProfileMenu";
 
@@ -106,9 +106,6 @@ function DarkTopbar({
           onClick={onToggleSettings}
         >
           <Settings size={24} />
-        </button>
-        <button className="icon-btn" title="Refresh">
-          <RefreshCw size={24} />
         </button>
         <ProfileMenu />
       </div>
@@ -326,9 +323,7 @@ export default function AppRoutes() {
           path="/profile-settings"
           element={
             <ProtectedRoute>
-              <Layout>
-                <ProfileSettings />
-              </Layout>
+              <ProfileSettings />
             </ProtectedRoute>
           }
         />
