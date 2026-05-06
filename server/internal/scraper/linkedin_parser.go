@@ -212,7 +212,7 @@ func (lp *LinkedInParser) ValidateCompanyInContext(company string, context strin
 }
 
 // SearchLinkedInByRoleWithValidation searches for LinkedIn profiles and validates company
-// Returns profiles with name and URL
+// Returns profiles with name and URL - NO LIMIT
 func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, role string) ([]map[string]string, error) {
 	profiles, err := lp.googleScraper.SearchLinkedInByRole(company, role)
 	if err != nil {
@@ -241,12 +241,55 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 			"url":  url,
 			"role": role,
 		})
-
-		// Limit to 3 results per role
-		if len(validatedProfiles) >= 3 {
-			break
-		}
 	}
 
 	return validatedProfiles, nil
+}
+
+// SearchCompanyProfiles searches for all employees of a company (no role filter)
+// Uses site:linkedin.com/in + company site search for broader results
+func (lp *LinkedInParser) SearchCompanyProfiles(company string) ([]map[string]string, error) {
+	// Search for company site pages and employees
+	query := fmt.Sprintf("site:linkedin.com/in \"%s\"", company)
+
+	// Get HTML from Google search
+	searchURL := fmt.Sprintf("https://www.google.com/search?q=%s", url.QueryEscape(query))
+	html, err := lp.googleScraper.FetchHTML(searchURL)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract all LinkedIn URLs from results
+	linkedinRegex := regexp.MustCompile(`https:\/\/www\.linkedin\.com\/in\/([a-zA-Z0-9\-]+)`)
+
+	var profiles []map[string]string
+	seen := make(map[string]bool)
+
+	matches := linkedinRegex.FindAllStringSubmatch(html, -1)
+	for _, match := range matches {
+		if len(match) >= 2 {
+			url := match[0]
+
+			if !seen[url] {
+				seen[url] = true
+
+				// Parse name from URL
+				name := lp.ParseNameFromLinkedInURL(url)
+				if name == "" || len(name) < 2 || strings.ToLower(name) == "unknown" {
+					continue
+				}
+
+				// Default role as Employee, can be overridden by snippet analysis if needed
+				role := "Employee"
+
+				profiles = append(profiles, map[string]string{
+					"name": name,
+					"url":  url,
+					"role": role,
+				})
+			}
+		}
+	}
+
+	return profiles, nil
 }

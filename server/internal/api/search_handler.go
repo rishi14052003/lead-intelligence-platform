@@ -71,13 +71,6 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 	db := database.Get()
 	leadService := services.NewLeadService(db)
 
-	// Initialize Apollo service with API key if available
-	apolloAPIKey := GetApolloAPIKey()
-	if apolloAPIKey != "" {
-		apolloService := services.NewApolloService(apolloAPIKey)
-		leadService.SetApolloService(apolloService)
-	}
-
 	// Perform search and enrichment
 	leads, err := leadService.SearchAndEnrichLeads(req.Query, userObjectID)
 	if err != nil {

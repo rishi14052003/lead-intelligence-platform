@@ -238,22 +238,3 @@ func CompanyNameToDomain(companyName string) string {
 	// Add .com TLD
 	return companyName + ".com"
 }
-
-// FormatLeadName capitalizes a name properly
-// e.g., "john doe" -> "John Doe"
-func FormatLeadName(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-
-	// Split by spaces and capitalize each word
-	words := strings.Fields(name)
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
-		}
-	}
-
-	return strings.Join(words, " ")
-}

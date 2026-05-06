@@ -20,13 +20,11 @@ import (
 // LeadService orchestrates lead finding and enrichment
 type LeadService struct {
 	db             *database.Database
-	apolloService  *ApolloService
 	webScraper     *scraper.WebScraper
 	googleScraper  *scraper.GoogleScraper
 	linkedinParser *scraper.LinkedInParser
 	scoringService *ScoringService
 	emailService   *EmailService
-	maxLeads       int
 }
 
 // NewLeadService creates a new lead service
@@ -38,14 +36,7 @@ func NewLeadService(db *database.Database) *LeadService {
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
-		apolloService:  nil, // Will be initialized with API key in main
-		maxLeads:       0,   // No limit - scrape all available leads
 	}
-}
-
-// SetApolloService sets the Apollo service
-func (ls *LeadService) SetApolloService(apollo *ApolloService) {
-	ls.apolloService = apollo
 }
 
 // SearchAndEnrichLeads performs a complete search and enrichment workflow using Apollo API
@@ -88,33 +79,9 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	var leads []models.Lead
 
-	// Use Apollo API if available
-	if ls.apolloService != nil {
-		log.Println("📡 Searching Apollo.io API...")
-		apolloLeads, err := ls.apolloService.SearchLeads(companyName)
-		if err != nil {
-			log.Printf("⚠️ Apollo API error: %v - falling back to LinkedIn extraction", err)
-			// Continue with LinkedIn extraction as fallback
-		} else if len(apolloLeads) > 0 {
-			log.Printf("✓ Apollo API returned %d leads", len(apolloLeads))
-
-			// Add SearchID to leads
-			for i := range apolloLeads {
-				apolloLeads[i].SearchID = searchID.(primitive.ObjectID)
-			}
-
-			leads = apolloLeads
-
-			// Update search with results
-			ls.updateSearchResults(ctx, searchID, len(leads))
-			log.Printf("✅ Search completed via Apollo. Found %d leads", len(leads))
-			return leads, nil
-		}
-	}
-
-	// LinkedIn extraction via Google search (primary method)
-	log.Println("🔍 Using LinkedIn extraction via Google search...")
-	log.Println("  Step 1: Searching for decision makers on LinkedIn...")
+	// Dual search approach: Role-specific + Company-wide
+	log.Println("🔍 Starting dual search approach...")
+	log.Println("  Step 1: Searching for specific roles on LinkedIn...")
 
 	// Use scraped URL if available, otherwise generate one
 	companyURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
@@ -166,9 +133,43 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		}
 	}
 
-	// Step 2: Fallback to basic website scraping if no LinkedIn results
-	if len(leadsMap) == 0 {
-		log.Println("  Step 2: No LinkedIn results found, falling back to website scraping...")
+	// Step 2: Company-wide search (no role filter)
+	log.Println("  Step 2: Searching for all company employees (company-wide search)...")
+	companyProfiles, err := ls.linkedinParser.SearchCompanyProfiles(companyName)
+	if err != nil {
+		log.Printf("    ⚠️ Error in company-wide search: %v", err)
+	} else {
+		log.Printf("    ✓ Found %d company profiles", len(companyProfiles))
+		for _, profile := range companyProfiles {
+			name := profile["name"]
+			linkedinURL := profile["url"]
+			role := profile["role"]
+
+			if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
+				continue
+			}
+
+			key := strings.ToLower(name)
+			if _, exists := leadsMap[key]; !exists {
+				lead := &models.Lead{
+					Name:       name,
+					Role:       role,
+					LinkedIn:   linkedinURL,
+					Company:    utils.FormatCompanyName(domain),
+					CompanyURL: companyURL,
+					SearchID:   searchID.(primitive.ObjectID),
+					Score:      ls.scoreByRole(role),
+					CreatedAt:  time.Now(),
+					UpdatedAt:  time.Now(),
+				}
+				leadsMap[key] = lead
+			}
+		}
+	}
+
+	// Step 3: Fallback to basic website scraping if results are limited
+	if len(leadsMap) < 5 {
+		log.Println("  Step 3: Supplementing with website scraping...")
 
 		websiteEmails, _, _ := ls.webScraper.ScrapeEmails(domain)
 		contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
@@ -177,8 +178,8 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		allEmails = deduplicateStrings(allEmails)
 
 		for _, email := range allEmails {
-			if email == "" || len(leadsMap) >= 10 {
-				break
+			if email == "" {
+				continue
 			}
 
 			name := ls.linkedinParser.ExtractNameFromEmail(email)
@@ -186,34 +187,19 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 				continue
 			}
 
-			// Try to infer role from email
-			inferredRole := ls.inferRole(&models.Lead{Email: email, Name: name})
-			
-			// Only add if role matches our target roles
-			if inferredRole != "CEO" && inferredRole != "CTO" && inferredRole != "HR" && inferredRole != "HR Manager" {
-				log.Printf("    ⚠️ Skipping email %s - role %s not in target roles", email, inferredRole)
-				continue
-			}
-
-			// Normalize role
-			if inferredRole == "HR Manager" {
-				inferredRole = "HR"
-			}
-
 			key := strings.ToLower(email)
 			if _, exists := leadsMap[key]; !exists {
 				lead := &models.Lead{
 					Name:       name,
 					Email:      email,
-					Role:       inferredRole,
+					Role:       "Employee",
 					Company:    utils.FormatCompanyName(domain),
 					CompanyURL: companyURL,
 					SearchID:   searchID.(primitive.ObjectID),
-					Score:      60,
+					Score:      50,
 					CreatedAt:  time.Now(),
 					UpdatedAt:  time.Now(),
 				}
-
 				leadsMap[key] = lead
 			}
 		}
