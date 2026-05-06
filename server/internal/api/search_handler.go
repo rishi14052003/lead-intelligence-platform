@@ -7,6 +7,8 @@ import (
 
 	"lead-finder/internal/database"
 	"lead-finder/internal/services"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type SearchRequest struct {
@@ -36,8 +38,15 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userObjectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Invalid user ID"})
+		return
+	}
+
 	var req SearchRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(SearchResponse{
@@ -70,7 +79,7 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform search and enrichment
-	leads, err := leadService.SearchAndEnrichLeads(req.Query)
+	leads, err := leadService.SearchAndEnrichLeads(req.Query, userObjectID)
 	if err != nil {
 		log.Printf("Search error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

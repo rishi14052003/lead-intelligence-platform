@@ -45,6 +45,11 @@ func (gs *GoogleScraper) SearchLeadership(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("site:%s leadership team OR executive team OR management team", domain))
 }
 
+// SearchHR searches for HR information on Google
+func (gs *GoogleScraper) SearchHR(domain string) ([]string, error) {
+	return gs.search(fmt.Sprintf("%s HR OR Human Resources OR Head of HR OR HR Director", domain))
+}
+
 // SearchPeople searches for people at a company on Google
 func (gs *GoogleScraper) SearchPeople(domain string) ([]string, error) {
 	return gs.search(fmt.Sprintf("site:%s people OR team OR staff", domain))
@@ -56,7 +61,7 @@ func (gs *GoogleScraper) search(query string) ([]string, error) {
 	encodedQuery := url.QueryEscape(query)
 	searchURL := fmt.Sprintf("https://www.google.com/search?q=%s", encodedQuery)
 
-	html, err := gs.fetchHTML(searchURL)
+	html, err := gs.FetchHTML(searchURL)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +80,8 @@ func (gs *GoogleScraper) search(query string) ([]string, error) {
 	return cleanedNames, nil
 }
 
-// fetchHTML fetches HTML content with a user agent
-func (gs *GoogleScraper) fetchHTML(urlStr string) (string, error) {
+// FetchHTML fetches HTML content with a user agent
+func (gs *GoogleScraper) FetchHTML(urlStr string) (string, error) {
 	req, err := http.NewRequest("GET", urlStr, nil)
 	if err != nil {
 		return "", err

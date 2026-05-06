@@ -24,10 +24,15 @@ func NewLinkedInParser() *LinkedInParser {
 func (lp *LinkedInParser) SearchProfiles(company string, role string) ([]string, error) {
 	query := fmt.Sprintf("site:linkedin.com/in %s %s", company, role)
 
-	profiles, err := lp.googleScraper.search(query)
+	// Get HTML from Google search
+	searchURL := fmt.Sprintf("https://www.google.com/search?q=%s", url.QueryEscape(query))
+	html, err := lp.googleScraper.FetchHTML(searchURL)
 	if err != nil {
 		return nil, err
 	}
+
+	// Extract LinkedIn URLs from the HTML
+	profiles := ExtractLinkedInLinks(html)
 
 	return profiles, nil
 }

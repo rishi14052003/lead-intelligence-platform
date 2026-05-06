@@ -31,8 +31,8 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
       <div className="sidebar-logo">
         <div className="logo-icon">L</div>
         <div>
-          <div className="logo-text" style={{ fontSize: "24px" }}>LeadFinder</div>
-          <div className="logo-sub" style={{ fontSize: "24px" }}>Intelligence</div>
+          <div className="logo-text" style={{ fontSize: "18px" }}>LeadFinder</div>
+          <div className="logo-sub" style={{ fontSize: "18px" }}>Intelligence</div>
         </div>
       </div>
 

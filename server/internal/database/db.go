@@ -107,5 +107,13 @@ func createIndexes(database *mongo.Database) {
 		log.Printf("Warning: Could not create query index: %v", err)
 	}
 
+	searchesUserIndexModel := mongo.IndexModel{
+		Keys: map[string]int{"userId": 1},
+	}
+	_, err = searchesCollection.Indexes().CreateOne(ctx, searchesUserIndexModel)
+	if err != nil {
+		log.Printf("Warning: Could not create userId index on searches: %v", err)
+	}
+
 	log.Println("✓ Database indexes created")
 }

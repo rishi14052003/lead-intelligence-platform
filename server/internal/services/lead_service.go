@@ -39,7 +39,7 @@ func NewLeadService(db *database.Database) *LeadService {
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
 		apolloService:  nil, // Will be initialized with API key in main
-		maxLeads:       50,
+		maxLeads:       0,   // No limit - scrape all available leads
 	}
 }
 
@@ -49,7 +49,7 @@ func (ls *LeadService) SetApolloService(apollo *ApolloService) {
 }
 
 // SearchAndEnrichLeads performs a complete search and enrichment workflow using Apollo API
-func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error) {
+func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.ObjectID) ([]models.Lead, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -75,6 +75,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 
 	// Create search record
 	search := &models.Search{
+		UserID:    userID,
 		Query:     query,
 		Domain:    domain,
 		CreatedAt: time.Now(),
@@ -134,10 +135,29 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 	log.Println("  Step 2: Searching for executives...")
 	ceoNames, _ := ls.googleScraper.SearchCEO(domain)
 	ctoNames, _ := ls.googleScraper.SearchCTO(domain)
+	hrNames, _ := ls.googleScraper.SearchHR(domain)
 	leadershipNames, _ := ls.googleScraper.SearchLeadership(domain)
+
+	// Track names with their roles
+	nameRoles := make(map[string]string)
+	for _, name := range ceoNames {
+		nameRoles[name] = "CEO"
+	}
+	for _, name := range ctoNames {
+		nameRoles[name] = "CTO"
+	}
+	for _, name := range hrNames {
+		nameRoles[name] = "HR"
+	}
+	for _, name := range leadershipNames {
+		if _, exists := nameRoles[name]; !exists {
+			nameRoles[name] = "Leadership"
+		}
+	}
 
 	allNames := append(websiteNames, ceoNames...)
 	allNames = append(allNames, ctoNames...)
+	allNames = append(allNames, hrNames...)
 	allNames = append(allNames, leadershipNames...)
 	allNames = deduplicateStrings(allNames)
 
@@ -151,19 +171,18 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 			continue
 		}
 
+		// Try to extract name from email
+		name := ls.linkedinParser.ExtractNameFromEmail(email)
+
 		lead := &models.Lead{
 			Email:      email,
+			Name:       name,
+			Role:       nameRoles[name], // Assign role if name matches
 			Company:    utils.FormatCompanyName(domain),
 			CompanyURL: companyURL,
 			SearchID:   searchID.(primitive.ObjectID),
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
-		}
-
-		// Try to extract name from email
-		name := ls.linkedinParser.ExtractNameFromEmail(email)
-		if name != "" {
-			lead.Name = name
 		}
 
 		leadsMap[email] = lead
@@ -180,6 +199,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string) ([]models.Lead, error)
 		lead := &models.Lead{
 			Name:       name,
 			Email:      email,
+			Role:       nameRoles[name], // Assign role from search
 			Company:    utils.FormatCompanyName(domain),
 			CompanyURL: companyURL,
 			SearchID:   searchID.(primitive.ObjectID),
@@ -264,14 +284,17 @@ func (ls *LeadService) GetLeadsByRole(ctx context.Context, role string) ([]model
 	return leads, nil
 }
 
-// GetSearchHistory returns search history
-func (ls *LeadService) GetSearchHistory(ctx context.Context) ([]models.Search, error) {
+// GetSearchHistory returns search history for a specific user
+func (ls *LeadService) GetSearchHistory(ctx context.Context, userID primitive.ObjectID) ([]models.Search, error) {
 	collection := ls.db.Instance.Collection("searches")
 
 	opts := options.Find()
 	opts.SetLimit(50)
+	opts.SetSort(bson.M{"createdAt": -1})
 
-	cursor, err := collection.Find(ctx, bson.M{}, opts)
+	filter := bson.M{"userId": userID}
+
+	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}

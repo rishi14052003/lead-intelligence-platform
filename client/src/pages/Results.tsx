@@ -77,7 +77,7 @@ export default function Results() {
   const [saving, setSaving] = useState(false);
   const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(7);
+  const [itemsPerPage] = useState(6);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogConfig, setDialogConfig] = useState<{
     title: string;

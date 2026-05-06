@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { searchLeads } from "../services/searchService";
 import { getSavedLeads, clearAllLeads } from "../services/leadService";
+import { useAuthStore } from "./authStore";
 import type { Lead } from "../services/searchService";
 
 type State = {
@@ -16,7 +17,12 @@ type State = {
   loadFromLocalStorage: () => void;
 };
 
-const STORAGE_KEY = 'search_results';
+const LEGACY_KEY = 'search_results';
+
+function getStorageKey(): string | null {
+  const user = useAuthStore.getState().user;
+  return user ? `search_results_${user.id}` : null;
+}
 
 export const useLeadStore = create<State>((set) => ({
   leads: [],
@@ -30,7 +36,10 @@ export const useLeadStore = create<State>((set) => ({
       const leads = await searchLeads(query);
       set({ leads, loading: false });
       // Save to localStorage
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+      const key = getStorageKey();
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(leads));
+      }
       return leads;
     } catch (err: unknown) {
       let msg = "Unknown error";
@@ -53,8 +62,10 @@ export const useLeadStore = create<State>((set) => ({
     }
   },
   clearLeads: () => {
+    const key = getStorageKey();
+    if (key) localStorage.removeItem(key);
+    localStorage.removeItem(LEGACY_KEY);
     set({ leads: [], error: null });
-    localStorage.removeItem(STORAGE_KEY);
   },
   clearAllSavedLeads: async () => {
     set({ loading: true, error: null });
@@ -71,13 +82,32 @@ export const useLeadStore = create<State>((set) => ({
   },
   loadFromLocalStorage: () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const key = getStorageKey();
+      if (!key) {
+        set({ leads: [] });
+        return;
+      }
+      const stored = localStorage.getItem(key);
       if (stored) {
         const leads = JSON.parse(stored);
         set({ leads });
+      } else {
+        set({ leads: [] });
       }
     } catch (err) {
       console.error("Error loading from localStorage:", err);
+      set({ leads: [] });
     }
   },
 }));
+
+// Subscribe to auth changes: reload on login, clear on logout
+useAuthStore.subscribe((state, prevState) => {
+  if (state.user?.id !== prevState.user?.id) {
+    if (state.user) {
+      useLeadStore.getState().loadFromLocalStorage();
+    } else {
+      useLeadStore.setState({ leads: [] });
+    }
+  }
+});
