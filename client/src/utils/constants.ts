@@ -1,4 +1,7 @@
-export const API_BASE_URL = "https://lead-intelligence-platform.onrender.com";
+// ⚠️ DEPRECATED: Use config.api.baseURL instead
+// This is kept for backward compatibility only
+// Update VITE_API_BASE_URL in .env file
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://lead-intelligence-platform.onrender.com";
 
 export const ROLES = [
   "CEO",

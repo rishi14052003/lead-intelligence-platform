@@ -16,11 +16,30 @@ export async function searchLeads(query: string): Promise<Lead[]> {
   try {
     const response = await api.post("/search", { query });
     
-    if (response.data.success && response.data.data) {
-      return response.data.data;
+    if (!response.data) {
+      throw new Error("No response from server");
     }
+
+    const { success, data, message } = response.data;
     
-    throw new Error(response.data.message || "Search failed");
+    // Check if request was successful
+    if (!success) {
+      throw new Error(message || "Search failed");
+    }
+
+    // Handle the response - data can be null, undefined, or an array
+    if (data === null || data === undefined) {
+      console.warn("Search returned no data. Returning empty array.");
+      return [];
+    }
+
+    // Ensure data is an array
+    if (!Array.isArray(data)) {
+      console.error("Expected array but got:", typeof data);
+      return [];
+    }
+
+    return data;
   } catch (error: any) {
     console.error("Search error:", error);
     throw error;

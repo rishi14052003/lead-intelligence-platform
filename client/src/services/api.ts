@@ -1,8 +1,9 @@
 import axios from "axios";
 import { useAuthStore } from "../store/authStore";
+import config from "../config";
 
 const api = axios.create({
-  baseURL: "https://lead-intelligence-platform.onrender.com",
+  baseURL: config.api.baseURL,
   timeout: 0,
   headers: { "Content-Type": "application/json" },
 });

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"lead-finder/configs"
 	"lead-finder/internal/database"
 	"lead-finder/internal/models"
 	"lead-finder/internal/scraper"
@@ -25,10 +26,19 @@ type LeadService struct {
 	linkedinParser *scraper.LinkedInParser
 	scoringService *ScoringService
 	emailService   *EmailService
+	apolloService  *ApolloService
 }
 
 // NewLeadService creates a new lead service
 func NewLeadService(db *database.Database) *LeadService {
+	var apolloService *ApolloService
+
+	// Get Apollo API key from config
+	config := configs.GetConfig()
+	if config != nil && config.ApolloAPIKey != "" {
+		apolloService = NewApolloService(config.ApolloAPIKey)
+	}
+
 	return &LeadService{
 		db:             db,
 		webScraper:     scraper.NewWebScraper(),
@@ -36,10 +46,12 @@ func NewLeadService(db *database.Database) *LeadService {
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
+		apolloService:  apolloService,
 	}
 }
 
-// SearchAndEnrichLeads performs a complete search and enrichment workflow using Apollo API
+// SearchAndEnrichLeads performs a complete search and enrichment workflow
+// Priority: Apollo API (most reliable) → Fallback to LinkedIn scraping + Web scraping
 func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.ObjectID) ([]models.Lead, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -61,7 +73,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 	}
 
 	domain := utils.FormatDomain(companyName)
-
 	log.Printf("🔎 Starting search for: %s (domain: %s)", companyName, domain)
 
 	// Create search record
@@ -79,145 +90,171 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	var leads []models.Lead
 
-	// Dual search approach: Role-specific + Company-wide
-	log.Println("🔍 Starting dual search approach...")
-	log.Println("  Step 1: Searching for specific roles on LinkedIn...")
-
-	// Use scraped URL if available, otherwise generate one
-	companyURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
-
-	roles := []string{"CEO", "CTO", "HR"}
-	leadsMap := make(map[string]*models.Lead)
-
-	for _, role := range roles {
-		log.Printf("  - Searching for %s profiles...", role)
-
-		// Search LinkedIn profiles for this role with company validation
-		profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+	// STEP 1: Try Apollo API (most reliable)
+	if ls.apolloService != nil {
+		log.Println("📡 Step 1: Searching Apollo API for company leads...")
+		apolloLeads, err := ls.apolloService.SearchLeads(companyName)
 		if err != nil {
-			log.Printf("    ⚠️ Error searching for %s: %v", role, err)
-			continue
-		}
-
-		log.Printf("    ✓ Found %d validated %s profiles", len(profiles), role)
-
-		// Create leads from profiles
-		for _, profile := range profiles {
-			name := profile["name"]
-			linkedinURL := profile["url"]
-
-			// Skip leads with unknown or invalid names
-			if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
-				log.Printf("    ⚠️ Skipping profile with invalid name: %s", name)
-				continue
-			}
-
-			// Use name as key to avoid duplicates
-			key := strings.ToLower(name)
-
-			if _, exists := leadsMap[key]; !exists {
-				lead := &models.Lead{
-					Name:       name,
-					Role:       role,
-					LinkedIn:   linkedinURL,
-					Company:    utils.FormatCompanyName(domain),
-					CompanyURL: companyURL,
-					SearchID:   searchID.(primitive.ObjectID),
-					Score:      ls.scoreByRole(role),
-					CreatedAt:  time.Now(),
-					UpdatedAt:  time.Now(),
+			log.Printf("⚠️ Apollo search failed: %v. Falling back to scraping...", err)
+		} else if len(apolloLeads) > 0 {
+			log.Printf("✓ Found %d leads from Apollo", len(apolloLeads))
+			// Add search ID to Apollo leads
+			for i := range apolloLeads {
+				apolloLeads[i].SearchID = searchID.(primitive.ObjectID)
+				if apolloLeads[i].Score == 0 {
+					apolloLeads[i].Score = ls.scoreByRole(apolloLeads[i].Role)
 				}
-
-				leadsMap[key] = lead
+				apolloLeads[i].CreatedAt = time.Now()
+				apolloLeads[i].UpdatedAt = time.Now()
 			}
+			leads = append(leads, apolloLeads...)
 		}
-	}
-
-	// Step 2: Company-wide search (no role filter)
-	log.Println("  Step 2: Searching for all company employees (company-wide search)...")
-	companyProfiles, err := ls.linkedinParser.SearchCompanyProfiles(companyName)
-	if err != nil {
-		log.Printf("    ⚠️ Error in company-wide search: %v", err)
 	} else {
-		log.Printf("    ✓ Found %d company profiles", len(companyProfiles))
-		for _, profile := range companyProfiles {
-			name := profile["name"]
-			linkedinURL := profile["url"]
-			role := profile["role"]
+		log.Println("⚠️ Apollo API not configured. Using fallback methods...")
+	}
 
-			if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
+	// STEP 2: If Apollo didn't return enough results, use LinkedIn + Web scraping
+	if len(leads) < 5 {
+		log.Printf("📍 Step 2: Supplementing with LinkedIn scraping (current: %d leads)...", len(leads))
+
+		companyURL := fmt.Sprintf("https://%s", domain)
+		roles := []string{"CEO", "CTO", "HR"}
+		leadsMap := make(map[string]*models.Lead)
+
+		// Add existing leads to map to avoid duplicates
+		for _, lead := range leads {
+			key := strings.ToLower(lead.Email + lead.LinkedIn)
+			leadsMap[key] = &lead
+		}
+
+		for _, role := range roles {
+			log.Printf("  - Searching for %s profiles...", role)
+
+			// Search LinkedIn profiles for this role
+			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+			if err != nil {
+				log.Printf("    ⚠️ Error searching for %s: %v", role, err)
 				continue
 			}
 
-			key := strings.ToLower(name)
-			if _, exists := leadsMap[key]; !exists {
-				lead := &models.Lead{
-					Name:       name,
-					Role:       role,
-					LinkedIn:   linkedinURL,
-					Company:    utils.FormatCompanyName(domain),
-					CompanyURL: companyURL,
-					SearchID:   searchID.(primitive.ObjectID),
-					Score:      ls.scoreByRole(role),
-					CreatedAt:  time.Now(),
-					UpdatedAt:  time.Now(),
+			log.Printf("    ✓ Found %d %s profiles", len(profiles), role)
+
+			for _, profile := range profiles {
+				name := profile["name"]
+				linkedinURL := profile["url"]
+
+				if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
+					continue
 				}
-				leadsMap[key] = lead
-			}
-		}
-	}
 
-	// Step 3: Fallback to basic website scraping if results are limited
-	if len(leadsMap) < 5 {
-		log.Println("  Step 3: Supplementing with website scraping...")
-
-		websiteEmails, _, _ := ls.webScraper.ScrapeEmails(domain)
-		contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
-
-		allEmails := append(websiteEmails, contactPageEmails...)
-		allEmails = deduplicateStrings(allEmails)
-
-		for _, email := range allEmails {
-			if email == "" {
-				continue
-			}
-
-			name := ls.linkedinParser.ExtractNameFromEmail(email)
-			if name == "" || strings.ToLower(name) == "unknown" {
-				continue
-			}
-
-			key := strings.ToLower(email)
-			if _, exists := leadsMap[key]; !exists {
-				lead := &models.Lead{
-					Name:       name,
-					Email:      email,
-					Role:       "Employee",
-					Company:    utils.FormatCompanyName(domain),
-					CompanyURL: companyURL,
-					SearchID:   searchID.(primitive.ObjectID),
-					Score:      50,
-					CreatedAt:  time.Now(),
-					UpdatedAt:  time.Now(),
+				key := strings.ToLower(name + linkedinURL)
+				if _, exists := leadsMap[key]; !exists {
+					lead := &models.Lead{
+						Name:       name,
+						Role:       role,
+						LinkedIn:   linkedinURL,
+						Company:    utils.FormatCompanyName(domain),
+						CompanyURL: companyURL,
+						SearchID:   searchID.(primitive.ObjectID),
+						Score:      ls.scoreByRole(role),
+						CreatedAt:  time.Now(),
+						UpdatedAt:  time.Now(),
+					}
+					leadsMap[key] = lead
 				}
-				leadsMap[key] = lead
+			}
+		}
+
+		// STEP 3: Company-wide search
+		if len(leadsMap) < 10 {
+			log.Println("  - Running company-wide search...")
+			companyProfiles, err := ls.linkedinParser.SearchCompanyProfiles(companyName)
+			if err != nil {
+				log.Printf("    ⚠️ Company-wide search error: %v", err)
+			} else {
+				log.Printf("    ✓ Found %d company profiles", len(companyProfiles))
+				for _, profile := range companyProfiles {
+					name := profile["name"]
+					linkedinURL := profile["url"]
+					role := profile["role"]
+
+					if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
+						continue
+					}
+
+					key := strings.ToLower(name + linkedinURL)
+					if _, exists := leadsMap[key]; !exists {
+						lead := &models.Lead{
+							Name:       name,
+							Role:       role,
+							LinkedIn:   linkedinURL,
+							Company:    utils.FormatCompanyName(domain),
+							CompanyURL: companyURL,
+							SearchID:   searchID.(primitive.ObjectID),
+							Score:      ls.scoreByRole(role),
+							CreatedAt:  time.Now(),
+							UpdatedAt:  time.Now(),
+						}
+						leadsMap[key] = lead
+					}
+				}
+			}
+		}
+
+		// STEP 4: Fallback to website scraping
+		if len(leadsMap) < 5 {
+			log.Println("  - Scraping website for emails...")
+			websiteEmails, _, _ := ls.webScraper.ScrapeEmails(domain)
+			contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
+
+			allEmails := append(websiteEmails, contactPageEmails...)
+			allEmails = deduplicateStrings(allEmails)
+
+			for _, email := range allEmails {
+				if email == "" {
+					continue
+				}
+
+				name := ls.linkedinParser.ExtractNameFromEmail(email)
+				if name == "" || strings.ToLower(name) == "unknown" {
+					continue
+				}
+
+				key := strings.ToLower(email)
+				if _, exists := leadsMap[key]; !exists {
+					lead := &models.Lead{
+						Name:       name,
+						Email:      email,
+						Role:       "Employee",
+						Company:    utils.FormatCompanyName(domain),
+						CompanyURL: companyURL,
+						SearchID:   searchID.(primitive.ObjectID),
+						Score:      50,
+						CreatedAt:  time.Now(),
+						UpdatedAt:  time.Now(),
+					}
+					leadsMap[key] = lead
+				}
+			}
+		}
+
+		// Convert map to slice
+		for _, lead := range leadsMap {
+			if strings.ToLower(lead.Name) != "unknown" && lead.Role != "Unknown" && lead.Role != "Executive" && lead.Role != "" {
+				leads = append(leads, *lead)
 			}
 		}
 	}
 
-	// Convert map to slice and filter out invalid leads
-	for _, lead := range leadsMap {
-		// Final validation - skip unknown or invalid roles
-		if strings.ToLower(lead.Name) == "unknown" || lead.Role == "Unknown" || lead.Role == "Executive" || lead.Role == "" {
-			log.Printf("    ⚠️ Skipping invalid lead: %s (role: %s)", lead.Name, lead.Role)
-			continue
-		}
-		leads = append(leads, *lead)
-	}
-
+	// Update search results count
 	ls.updateSearchResults(ctx, searchID, len(leads))
 
-	log.Printf("✅ Search completed via LinkedIn extraction. Found %d leads", len(leads))
+	if len(leads) == 0 {
+		log.Printf("⚠️ No leads found for: %s", query)
+		return []models.Lead{}, nil
+	}
+
+	log.Printf("✅ Search completed. Found %d leads", len(leads))
 	return leads, nil
 }
 

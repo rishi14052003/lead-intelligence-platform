@@ -1,4 +1,6 @@
-const BASE_URL = "https://lead-intelligence-platform.onrender.com"
+import config from "../config"
+
+const BASE_URL = config.api.baseURL
 
 export const searchLeads = async (query: string) => {
   const res = await fetch(`${BASE_URL}/search`, {
