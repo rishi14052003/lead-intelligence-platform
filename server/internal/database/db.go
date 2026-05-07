@@ -15,6 +15,7 @@ type Database struct {
 	Instance *mongo.Database
 }
 
+
 var db *Database
 
 func Init(mongoURI, dbName string) (*Database, error) {
