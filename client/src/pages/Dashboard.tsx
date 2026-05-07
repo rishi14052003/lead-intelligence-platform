@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Users, Bookmark, Search, TrendingUp, Clock, Grid, BarChart3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useHistoryStore } from "../store/historyStore";
 
 function StatCard({ 
   label, 
@@ -114,7 +115,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [selectedActions, setSelectedActions] = useState<Set<number>>(new Set());
   const [performancePeriod, setPerformancePeriod] = useState<'week' | 'month' | 'year'>('week');
-  
+  const { history, loadFromLocalStorage } = useHistoryStore();
+
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, [loadFromLocalStorage]);
+
   const getDateRange = () => {
     if (performancePeriod === 'week') return getWeekRange();
     if (performancePeriod === 'month') return getMonthRange();
@@ -130,6 +136,8 @@ export default function Dashboard() {
     }
     setSelectedActions(newSelected);
   };
+
+  const displayHistory = history.slice(0, 5);
 
   return (
     <div>
@@ -186,12 +194,33 @@ export default function Dashboard() {
 
       <div className="row" style={{ display: 'flex', gap: '14px' }}>
         <div className="col-6" style={{ flex: 1 }}>
-          <Card title="Recent Activity" extra={<button className="btn btn-ghost btn-sm">View All</button>} style={{ height: '100%' }}>
-            <EmptyState icon={Clock} title="No recent activity" subtitle="Your recent searches and lead activities will appear here." iconSize={24} />
+          <Card title="Recent Activity" style={{ height: '100%' }}>
+            {displayHistory.length === 0 ? (
+              <EmptyState icon={Clock} title="No recent activity" subtitle="Your recent searches and lead activities will appear here." iconSize={24} />
+            ) : (
+              <div className="history-list" style={{ minHeight: "300px" }}>
+                {displayHistory.map((h) => (
+                  <div key={h.id} className="history-item" onClick={() => navigate("/results")} style={{ cursor: "pointer" }}>
+                    <div className="history-left">
+                      <div className="history-icon-wrapper">
+                        <Search size={19} />
+                      </div>
+                      <div className="history-content">
+                        <div className="history-domain">{h.domain}</div>
+                        <div className="history-meta">{h.date} · {h.leadsFound} leads found</div>
+                      </div>
+                    </div>
+                    <div className="history-right">
+                      <div className="history-badge">{h.leadsFound}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
         <div className="col-6" style={{ flex: 1 }}>
-          <Card title="Top Companies" extra={<button className="btn btn-ghost btn-sm">View All</button>} style={{ height: '100%' }}>
+          <Card title="Top Companies" style={{ height: '100%' }}>
             <EmptyState icon={Grid} title="No data yet" subtitle="Companies with most leads will appear here." iconSize={24} />
           </Card>
         </div>

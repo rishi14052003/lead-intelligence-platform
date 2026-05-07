@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"lead-finder/internal/database"
 	"lead-finder/internal/services"
@@ -88,5 +90,53 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Message: "Search completed successfully",
 		Data:    leads,
+	})
+}
+
+// GetHistoryHandler returns the search history for the authenticated user
+func GetHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Unauthorized"})
+		return
+	}
+
+	userObjectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Invalid user ID"})
+		return
+	}
+
+	db := database.Get()
+	leadService := services.NewLeadService(db)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	history, err := leadService.GetSearchHistory(ctx, userObjectID)
+	if err != nil {
+		log.Printf("History fetch error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(SearchResponse{
+			Success: false,
+			Message: "Failed to fetch history",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(SearchResponse{
+		Success: true,
+		Message: "History fetched successfully",
+		Data:    history,
 	})
 }

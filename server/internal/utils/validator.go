@@ -135,6 +135,26 @@ func ValidateQuery(query string) (bool, string) {
 	return true, ""
 }
 
+// IsBlockedEmail checks if an email is a generic/blocked email
+func IsBlockedEmail(email string) bool {
+	if email == "" {
+		return true
+	}
+	blocked := []string{
+		"support@", "info@", "admin@", "noreply@", "no-reply@",
+		"help@", "sales@", "marketing@", "contact@", "hello@",
+		"team@", "office@", "webmaster@", "postmaster@",
+		"feedback@", "billing@", "careers@", "jobs@", "press@",
+	}
+	lower := strings.ToLower(email)
+	for _, b := range blocked {
+		if strings.HasPrefix(lower, b) {
+			return true
+		}
+	}
+	return false
+}
+
 // SanitizeInput removes potentially harmful characters
 func SanitizeInput(input string) string {
 	// Remove leading/trailing whitespace

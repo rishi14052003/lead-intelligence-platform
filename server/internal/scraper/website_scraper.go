@@ -13,6 +13,15 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// WebsiteScrapeResult holds data scraped from a company website
+type WebsiteScrapeResult struct {
+	Domain      string
+	Emails      []string
+	Names       []string
+	SocialLinks []string
+	Pages       map[string]string // url -> cleaned text content
+}
+
 // WebScraper handles website scraping
 type WebScraper struct {
 	client *http.Client
@@ -22,7 +31,7 @@ type WebScraper struct {
 func NewWebScraper() *WebScraper {
 	return &WebScraper{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 100,
@@ -31,113 +40,90 @@ func NewWebScraper() *WebScraper {
 	}
 }
 
-// ScrapeEmails extracts emails from a website
-func (ws *WebScraper) ScrapeEmails(domain string) ([]string, string, error) {
-	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
-
-	// Get the HTML
-	finalURL, html, err := ws.fetchHTML(url)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Extract emails from HTML
-	emails := utils.ExtractEmails(html)
-
-	// Filter out generic emails
-	var filteredEmails []string
-	for _, email := range emails {
-		if !utils.IsGenericEmail(email) && strings.HasSuffix(email, utils.ExtractDomain(domain)) {
-			filteredEmails = append(filteredEmails, email)
-		}
-	}
-
-	return filteredEmails, finalURL, nil
-}
-
-// ScrapeContactPage looks for contact information on the website
-func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, string, error) {
+// ScrapeCompanyWebsite scrapes the official website for contact info and leadership data
+func (ws *WebScraper) ScrapeCompanyWebsite(domain string) (*WebsiteScrapeResult, error) {
 	baseURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
-
-	// Try common contact page URLs
-	contactURLs := []string{
-		baseURL + "/contact",
-		baseURL + "/contact-us",
-		baseURL + "/contact us",
-		baseURL + "/about",
-		baseURL + "/team",
-		baseURL + "/people",
+	result := &WebsiteScrapeResult{
+		Domain: utils.FormatDomain(domain),
+		Pages:  make(map[string]string),
 	}
 
-	var allEmails []string
-	var finalURL string
-	for _, url := range contactURLs {
-		fetchedURL, html, err := ws.fetchHTML(url)
+	pages := []string{"", "/about", "/team", "/contact", "/careers", "/people", "/leadership", "/executives"}
+	for _, path := range pages {
+		url := baseURL + path
+		finalURL, html, err := ws.fetchHTML(url)
 		if err != nil {
 			continue
 		}
-
-		// Store the first successful URL
-		if finalURL == "" {
-			finalURL = fetchedURL
-		}
+		text := utils.CleanText(html)
+		result.Pages[finalURL] = text
 
 		emails := utils.ExtractEmails(html)
-		names := utils.ExtractNames(html)
-
-		// Add emails from contact pages (even generic ones might be relevant here)
 		for _, email := range emails {
-			if strings.HasSuffix(email, utils.ExtractDomain(domain)) && !contains(allEmails, email) {
-				allEmails = append(allEmails, email)
+			if utils.IsBlockedEmail(email) {
+				continue
+			}
+			if strings.HasSuffix(strings.ToLower(email), result.Domain) || utils.ValidateEmail(email) {
+				result.Emails = append(result.Emails, email)
 			}
 		}
 
-		// If we found results, we can stop searching
-		if len(emails) > 0 || len(names) > 0 {
-			break
-		}
+		names := utils.ExtractNames(text)
+		result.Names = append(result.Names, names...)
+
+		social := ws.extractSocialLinks(html, baseURL)
+		result.SocialLinks = append(result.SocialLinks, social...)
 	}
 
-	return allEmails, finalURL, nil
+	result.Emails = utils.RemoveDuplicates(result.Emails)
+	result.Names = utils.RemoveDuplicates(result.Names)
+	result.SocialLinks = utils.RemoveDuplicates(result.SocialLinks)
+
+	return result, nil
 }
 
-// ExtractNames extracts names from website content
-func (ws *WebScraper) ExtractNames(domain string) ([]string, string, error) {
-	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
-
-	finalURL, html, err := ws.fetchHTML(url)
+// ScrapeEmails extracts emails from the homepage (legacy support)
+func (ws *WebScraper) ScrapeEmails(domain string) ([]string, string, error) {
+	result, err := ws.ScrapeCompanyWebsite(domain)
 	if err != nil {
 		return nil, "", err
 	}
-
-	names := utils.ExtractNames(html)
-	return names, finalURL, nil
+	return result.Emails, result.Domain, nil
 }
 
-// ScrapeCompanyInfo extracts company information
-func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error) {
-	url := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
+// ScrapeContactPage scrapes contact pages for emails (legacy support)
+func (ws *WebScraper) ScrapeContactPage(domain string) ([]string, string, error) {
+	return ws.ScrapeEmails(domain)
+}
 
-	_, html, err := ws.fetchHTML(url)
+// ExtractNames extracts names from website content (legacy support)
+func (ws *WebScraper) ExtractNames(domain string) ([]string, string, error) {
+	result, err := ws.ScrapeCompanyWebsite(domain)
+	if err != nil {
+		return nil, "", err
+	}
+	return result.Names, result.Domain, nil
+}
+
+// ScrapeCompanyInfo extracts company name and description from the homepage
+func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error) {
+	baseURL := fmt.Sprintf("https://%s", utils.FormatDomain(domain))
+	_, html, err := ws.fetchHTML(baseURL)
 	if err != nil {
 		return nil, err
 	}
 
 	info := make(map[string]string)
-
-	// Parse HTML
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		return info, nil
 	}
 
-	// Try to extract company name from title
 	title := strings.TrimSpace(doc.Find("title").First().Text())
 	if title != "" {
 		info["company"] = title
 	}
 
-	// Try to extract description from meta tags
 	description, _ := doc.Find("meta[name='description']").Attr("content")
 	if description != "" {
 		info["description"] = description
@@ -146,49 +132,44 @@ func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error
 	return info, nil
 }
 
-// fetchHTML fetches HTML content from a URL and returns the final URL after redirects
+func (ws *WebScraper) extractSocialLinks(html, baseURL string) []string {
+	var links []string
+	re := regexp.MustCompile(`https?://(?:www\.)?(?:linkedin|twitter|x|facebook|instagram)\.com/[^\s"]+`)
+	matches := re.FindAllString(html, -1)
+	for _, m := range matches {
+		links = append(links, m)
+	}
+	return links
+}
+
 func (ws *WebScraper) fetchHTML(url string) (string, string, error) {
-	resp, err := ws.client.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to fetch %s: %w", url, err)
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := ws.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("fetch failed for %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
-	// Get the final URL after redirects
 	finalURL := resp.Request.URL.String()
-
-	// Limit response body size
-	limitedReader := io.LimitReader(resp.Body, 5*1024*1024) // 5MB limit
-
-	body, err := io.ReadAll(limitedReader)
+	limited := io.LimitReader(resp.Body, 5*1024*1024)
+	body, err := io.ReadAll(limited)
 	if err != nil {
-		return finalURL, "", fmt.Errorf("failed to read response body: %w", err)
+		return finalURL, "", err
 	}
-
 	return finalURL, string(body), nil
 }
 
-// Helper function to check if a string is in a slice
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
+// ExtractEmails is a legacy helper that scrapes a domain for emails
 func ExtractEmails(domain string) []string {
-	resp, err := http.Get("https://" + domain)
+	ws := NewWebScraper()
+	result, err := ws.ScrapeCompanyWebsite(domain)
 	if err != nil {
 		return []string{}
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	re := regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
-	matches := re.FindAllString(string(body), -1)
-
-	return matches
+	return result.Emails
 }

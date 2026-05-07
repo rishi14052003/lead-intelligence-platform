@@ -37,13 +37,18 @@ func Routes() *chi.Mux {
 		// Search endpoint
 		r.Post("/search", SearchHandler)
 
+		// History endpoint
+		r.Get("/history", GetHistoryHandler)
+
 		// Leads endpoints
 		r.Get("/leads", GetLeadsHandler)
+		r.Get("/leads/company/{id}", GetCompanyLeadsHandler)
 		r.Delete("/leads", DeleteLeadHandler)
 		r.Post("/leads/save", SaveLeadsHandler)
 
-		// Export endpoint
+		// Export endpoints
 		r.Get("/export", ExportHandler)
+		r.Get("/export/csv", ExportHandler)
 	})
 
 	return r

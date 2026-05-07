@@ -97,6 +97,31 @@ func createIndexes(database *mongo.Database) {
 		log.Printf("Warning: Could not create userId index on leads: %v", err)
 	}
 
+	// Leads collection extra indexes
+	leadsCompanyIndex := mongo.IndexModel{
+		Keys: map[string]int{"company": 1},
+	}
+	_, err = leadsCollection.Indexes().CreateOne(ctx, leadsCompanyIndex)
+	if err != nil {
+		log.Printf("Warning: Could not create company index on leads: %v", err)
+	}
+
+	leadsLinkedInIndex := mongo.IndexModel{
+		Keys: map[string]int{"linkedin": 1},
+	}
+	_, err = leadsCollection.Indexes().CreateOne(ctx, leadsLinkedInIndex)
+	if err != nil {
+		log.Printf("Warning: Could not create linkedin index on leads: %v", err)
+	}
+
+	leadsSearchIndex := mongo.IndexModel{
+		Keys: map[string]int{"searchId": 1},
+	}
+	_, err = leadsCollection.Indexes().CreateOne(ctx, leadsSearchIndex)
+	if err != nil {
+		log.Printf("Warning: Could not create searchId index on leads: %v", err)
+	}
+
 	// Searches collection indexes
 	searchesCollection := database.Collection("searches")
 	searchIndexModel := mongo.IndexModel{
@@ -113,6 +138,17 @@ func createIndexes(database *mongo.Database) {
 	_, err = searchesCollection.Indexes().CreateOne(ctx, searchesUserIndexModel)
 	if err != nil {
 		log.Printf("Warning: Could not create userId index on searches: %v", err)
+	}
+
+	// Companies collection index
+	companiesCollection := database.Collection("companies")
+	companiesIndexModel := mongo.IndexModel{
+		Keys:    map[string]int{"name": 1},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err = companiesCollection.Indexes().CreateOne(ctx, companiesIndexModel)
+	if err != nil {
+		log.Printf("Warning: Could not create name index on companies: %v", err)
 	}
 
 	log.Println("✓ Database indexes created")

@@ -47,14 +47,14 @@ func ExtractNames(text string) []string {
 		}
 	}
 
-	return removeDuplicates(names)
+	return RemoveDuplicates(names)
 }
 
 // ExtractLinkedInURLs extracts LinkedIn profile URLs
 func ExtractLinkedInURLs(text string) []string {
 	linkedinRegex := regexp.MustCompile(`https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9\-]+/?`)
 	matches := linkedinRegex.FindAllString(text, -1)
-	return removeDuplicates(matches)
+	return RemoveDuplicates(matches)
 }
 
 // ExtractDomain extracts domain from URL or email
@@ -149,7 +149,7 @@ func isNoise(text string) bool {
 }
 
 // RemoveDuplicates removes duplicate strings from a slice
-func removeDuplicates(slice []string) []string {
+func RemoveDuplicates(slice []string) []string {
 	uniqueMap := make(map[string]bool)
 	var result []string
 

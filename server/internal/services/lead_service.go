@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -26,17 +26,15 @@ type LeadService struct {
 	linkedinParser *scraper.LinkedInParser
 	scoringService *ScoringService
 	emailService   *EmailService
-	apolloService  *ApolloService
+	geminiService  *GeminiService
 }
 
 // NewLeadService creates a new lead service
 func NewLeadService(db *database.Database) *LeadService {
-	var apolloService *ApolloService
-
-	// Get Apollo API key from config
 	config := configs.GetConfig()
-	if config != nil && config.ApolloAPIKey != "" {
-		apolloService = NewApolloService(config.ApolloAPIKey)
+	var geminiService *GeminiService
+	if config != nil && config.GeminiAPIKey != "" {
+		geminiService = NewGeminiService(config.GeminiAPIKey)
 	}
 
 	return &LeadService{
@@ -46,413 +44,374 @@ func NewLeadService(db *database.Database) *LeadService {
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
-		apolloService:  apolloService,
+		geminiService:  geminiService,
 	}
 }
 
-// SearchAndEnrichLeads performs a complete search and enrichment workflow
-// Priority: Apollo API (most reliable) → Fallback to LinkedIn scraping + Web scraping
+// SearchAndEnrichLeads performs a complete AI-powered search and enrichment workflow
 func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.ObjectID) ([]models.Lead, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// Validate query
 	valid, errMsg := utils.ValidateQuery(query)
 	if !valid {
 		return nil, &ValidationError{Message: errMsg}
 	}
 
-	// Sanitize input
 	query = utils.SanitizeInput(query)
+	companyName := strings.TrimSpace(query)
 
-	// Extract company name from query
-	parts := strings.Fields(query)
-	var companyName string
-	if len(parts) > 0 {
-		companyName = parts[0]
-	}
-
-	domain := utils.FormatDomain(companyName)
-	log.Printf("🔎 Starting search for: %s (domain: %s)", companyName, domain)
+	log.Printf("🔎 Starting AI lead search for: %s", companyName)
 
 	// Create search record
 	search := &models.Search{
 		UserID:    userID,
 		Query:     query,
-		Domain:    domain,
+		Status:    "in_progress",
 		CreatedAt: time.Now(),
 	}
 
 	searchID, err := ls.saveSearch(ctx, search)
 	if err != nil {
-		log.Printf("Error saving search: %v", err)
+		log.Printf("⚠️ Error saving search record: %v", err)
+		searchID = primitive.NewObjectID()
 	}
 
-	var leads []models.Lead
+	searchObjID, _ := searchID.(primitive.ObjectID)
 
-	// STEP 1: Try Apollo API (most reliable)
-	if ls.apolloService != nil {
-		log.Println("📡 Step 1: Searching Apollo API for company leads...")
-		apolloLeads, err := ls.apolloService.SearchLeads(companyName)
-		if err != nil {
-			log.Printf("⚠️ Apollo search failed: %v. Falling back to scraping...", err)
-		} else if len(apolloLeads) > 0 {
-			log.Printf("✓ Found %d leads from Apollo", len(apolloLeads))
-			// Add search ID to Apollo leads
-			for i := range apolloLeads {
-				apolloLeads[i].SearchID = searchID.(primitive.ObjectID)
-				if apolloLeads[i].Score == 0 {
-					apolloLeads[i].Score = ls.scoreByRole(apolloLeads[i].Role)
-				}
-				apolloLeads[i].CreatedAt = time.Now()
-				apolloLeads[i].UpdatedAt = time.Now()
-			}
-			leads = append(leads, apolloLeads...)
-		}
+	// Step 1: Find official website
+	website, _ := ls.googleScraper.FindOfficialWebsite(companyName)
+	if website != "" {
+		log.Printf("✓ Found official website: %s", website)
 	} else {
-		log.Println("⚠️ Apollo API not configured. Using fallback methods...")
+		log.Printf("⚠️ Could not find official website for: %s", companyName)
 	}
 
-	// STEP 2: If Apollo didn't return enough results, use LinkedIn + Web scraping
-	if len(leads) < 5 {
-		log.Printf("📍 Step 2: Supplementing with LinkedIn scraping (current: %d leads)...", len(leads))
+	// Step 2: Concurrent scraping — LinkedIn + Website
+	type linkedinResult struct {
+		profiles []map[string]string
+	}
+	type websiteResult struct {
+		result *scraper.WebsiteScrapeResult
+	}
 
-		companyURL := fmt.Sprintf("https://%s", domain)
-		roles := []string{"CEO", "CTO", "HR"}
-		leadsMap := make(map[string]*models.Lead)
+	linkedinChan := make(chan linkedinResult, 1)
+	websiteChan := make(chan websiteResult, 1)
 
-		// Add existing leads to map to avoid duplicates
-		for _, lead := range leads {
-			key := strings.ToLower(lead.Email + lead.LinkedIn)
-			leadsMap[key] = &lead
-		}
-
+	// Goroutine 1: LinkedIn profile scraping via Google
+	go func() {
+		var allProfiles []map[string]string
+		roles := []string{"CEO", "CTO", "Founder", "HR"}
 		for _, role := range roles {
-			log.Printf("  - Searching for %s profiles...", role)
-
-			// Search LinkedIn profiles for this role
 			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
 			if err != nil {
-				log.Printf("    ⚠️ Error searching for %s: %v", role, err)
+				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
 				continue
 			}
-
-			log.Printf("    ✓ Found %d %s profiles", len(profiles), role)
-
-			for _, profile := range profiles {
-				name := profile["name"]
-				linkedinURL := profile["url"]
-
-				if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
-					continue
-				}
-
-				key := strings.ToLower(name + linkedinURL)
-				if _, exists := leadsMap[key]; !exists {
-					lead := &models.Lead{
-						Name:       name,
-						Role:       role,
-						LinkedIn:   linkedinURL,
-						Company:    utils.FormatCompanyName(domain),
-						CompanyURL: companyURL,
-						SearchID:   searchID.(primitive.ObjectID),
-						Score:      ls.scoreByRole(role),
-						CreatedAt:  time.Now(),
-						UpdatedAt:  time.Now(),
-					}
-					leadsMap[key] = lead
-				}
+			if len(profiles) > 0 {
+				log.Printf("✓ Found %d LinkedIn profiles for role: %s", len(profiles), role)
+				allProfiles = append(allProfiles, profiles...)
 			}
 		}
+		linkedinChan <- linkedinResult{profiles: allProfiles}
+	}()
 
-		// STEP 3: Company-wide search
-		if len(leadsMap) < 10 {
-			log.Println("  - Running company-wide search...")
-			companyProfiles, err := ls.linkedinParser.SearchCompanyProfiles(companyName)
-			if err != nil {
-				log.Printf("    ⚠️ Company-wide search error: %v", err)
-			} else {
-				log.Printf("    ✓ Found %d company profiles", len(companyProfiles))
-				for _, profile := range companyProfiles {
-					name := profile["name"]
-					linkedinURL := profile["url"]
-					role := profile["role"]
-
-					if name == "" || strings.ToLower(name) == "unknown" || len(name) < 2 {
-						continue
-					}
-
-					key := strings.ToLower(name + linkedinURL)
-					if _, exists := leadsMap[key]; !exists {
-						lead := &models.Lead{
-							Name:       name,
-							Role:       role,
-							LinkedIn:   linkedinURL,
-							Company:    utils.FormatCompanyName(domain),
-							CompanyURL: companyURL,
-							SearchID:   searchID.(primitive.ObjectID),
-							Score:      ls.scoreByRole(role),
-							CreatedAt:  time.Now(),
-							UpdatedAt:  time.Now(),
-						}
-						leadsMap[key] = lead
-					}
-				}
-			}
+	// Goroutine 2: Website scraping
+	go func() {
+		if website == "" {
+			websiteChan <- websiteResult{result: &scraper.WebsiteScrapeResult{Pages: make(map[string]string)}}
+			return
 		}
-
-		// STEP 4: Fallback to website scraping
-		if len(leadsMap) < 5 {
-			log.Println("  - Scraping website for emails...")
-			websiteEmails, _, _ := ls.webScraper.ScrapeEmails(domain)
-			contactPageEmails, _, _ := ls.webScraper.ScrapeContactPage(domain)
-
-			allEmails := append(websiteEmails, contactPageEmails...)
-			allEmails = deduplicateStrings(allEmails)
-
-			for _, email := range allEmails {
-				if email == "" {
-					continue
-				}
-
-				name := ls.linkedinParser.ExtractNameFromEmail(email)
-				if name == "" || strings.ToLower(name) == "unknown" {
-					continue
-				}
-
-				key := strings.ToLower(email)
-				if _, exists := leadsMap[key]; !exists {
-					lead := &models.Lead{
-						Name:       name,
-						Email:      email,
-						Role:       "Employee",
-						Company:    utils.FormatCompanyName(domain),
-						CompanyURL: companyURL,
-						SearchID:   searchID.(primitive.ObjectID),
-						Score:      50,
-						CreatedAt:  time.Now(),
-						UpdatedAt:  time.Now(),
-					}
-					leadsMap[key] = lead
-				}
-			}
+		domain := utils.FormatDomain(website)
+		result, err := ls.webScraper.ScrapeCompanyWebsite(domain)
+		if err != nil {
+			log.Printf("⚠️ Website scraping failed: %v", err)
+			websiteChan <- websiteResult{result: &scraper.WebsiteScrapeResult{Pages: make(map[string]string)}}
+			return
 		}
+		log.Printf("✓ Scraped %d website pages", len(result.Pages))
+		websiteChan <- websiteResult{result: result}
+	}()
 
-		// Convert map to slice
-		for _, lead := range leadsMap {
-			if strings.ToLower(lead.Name) != "unknown" && lead.Role != "Unknown" && lead.Role != "Executive" && lead.Role != "" {
-				leads = append(leads, *lead)
+	// Collect results
+	liRes := <-linkedinChan
+	webRes := <-websiteChan
+
+	log.Printf("📊 Raw data: %d LinkedIn profiles, %d website pages", len(liRes.profiles), len(webRes.result.Pages))
+
+	// Step 3: Build data for Gemini
+	var websiteText string
+	var websiteDataForGemini []map[string]string
+	if webRes.result != nil {
+		for pageURL, text := range webRes.result.Pages {
+			websiteText += text + "\n"
+			if len(webRes.result.Emails) > 0 || len(webRes.result.Names) > 0 {
+				websiteDataForGemini = append(websiteDataForGemini, map[string]string{
+					"page":         pageURL,
+					"emails_found": strings.Join(webRes.result.Emails, ", "),
+					"names_found":  strings.Join(webRes.result.Names[:minInt(len(webRes.result.Names), 10)], ", "),
+				})
 			}
 		}
 	}
 
-	// Update search results count
-	ls.updateSearchResults(ctx, searchID, len(leads))
-
-	if len(leads) == 0 {
-		log.Printf("⚠️ No leads found for: %s", query)
-		return []models.Lead{}, nil
+	// Step 4: Gemini AI Enrichment
+	// Gemini uses scraped data OR falls back to its own knowledge about the company
+	var enriched *EnrichedCompany
+	if ls.geminiService != nil {
+		log.Println("🤖 Sending data to Gemini AI for enrichment...")
+		var gemErr error
+		enriched, gemErr = ls.geminiService.EnrichLeads(companyName, website, liRes.profiles, websiteDataForGemini, websiteText)
+		if gemErr != nil {
+			log.Printf("⚠️ Gemini enrichment failed: %v", gemErr)
+		} else {
+			log.Printf("✓ Gemini returned %d enriched leads", len(enriched.Leads))
+		}
+	} else {
+		log.Println("⚠️ Gemini service not configured (GEMINI_API_KEY missing)")
 	}
 
-	log.Printf("✅ Search completed. Found %d leads", len(leads))
+	// Step 5: Build final leads map (Gemini results take priority)
+	leadsMap := make(map[string]*models.Lead)
+
+	// Add Gemini-enriched leads first
+	if enriched != nil {
+		for _, l := range enriched.Leads {
+			if l.Name == "" {
+				continue
+			}
+			key := strings.ToLower(strings.ReplaceAll(l.Name, " ", "") + l.Role)
+			leadsMap[key] = &models.Lead{
+				Name:          l.Name,
+				Role:          l.Role,
+				Email:         l.Email,
+				EmailStatus:   l.EmailStatus,
+				LinkedIn:      l.LinkedIn,
+				Company:       companyName,
+				Website:       enriched.Website,
+				CompanyURL:    enriched.Website,
+				Confidence:    l.Confidence,
+				Source:        l.Source,
+				EmailVerified: false,
+				SearchID:      searchObjID,
+				Score:         ls.scoringService.CalculateScore(l.Role, l.LinkedIn != "", l.Email != ""),
+				CreatedAt:     time.Now(),
+				UpdatedAt:     time.Now(),
+			}
+		}
+	}
+
+	// Step 6: Fallback — add raw LinkedIn profiles not already covered by Gemini
+	for _, p := range liRes.profiles {
+		name := p["name"]
+		role := p["role"]
+		linkedinURL := p["url"]
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(strings.ReplaceAll(name, " ", "") + role)
+		if _, exists := leadsMap[key]; !exists {
+			leadsMap[key] = &models.Lead{
+				Name:        name,
+				Role:        role,
+				LinkedIn:    linkedinURL,
+				Company:     companyName,
+				Website:     website,
+				CompanyURL:  website,
+				Confidence:  ls.scoringService.CalculateScore(role, true, false),
+				Source:      "linkedin",
+				EmailStatus: "not_found",
+				SearchID:    searchObjID,
+				Score:       ls.scoringService.CalculateScore(role, true, false),
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}
+		}
+	}
+
+	// Step 7: Assign REAL scraped emails to leads (only if email matches name — no guessing)
+	if webRes.result != nil && len(webRes.result.Emails) > 0 {
+		for _, email := range webRes.result.Emails {
+			if utils.IsBlockedEmail(email) {
+				continue
+			}
+			for _, lead := range leadsMap {
+				if lead.Email == "" && matchEmailToName(email, lead.Name) {
+					lead.Email = email
+					lead.EmailStatus = "scraped_public"
+					lead.EmailVerified = false
+					lead.Source = "website"
+					lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", true)
+					break
+				}
+			}
+		}
+	}
+
+	// Step 8: Finalise leads list
+	var leads []models.Lead
+	for _, lead := range leadsMap {
+		if lead.Name == "" || strings.ToLower(lead.Name) == "unknown" || len(lead.Name) < 3 {
+			continue
+		}
+		lead.UserID = userID
+		leads = append(leads, *lead)
+	}
+
+	// Step 9: Store in MongoDB
+	for i := range leads {
+		if err := ls.SaveLead(ctx, &leads[i]); err != nil {
+			log.Printf("⚠️ Error saving lead %s: %v", leads[i].Name, err)
+		}
+	}
+
+	// Step 10: Update search record
+	ls.finaliseSearch(ctx, searchID, len(leads), website)
+
+	log.Printf("✅ Search complete. Returning %d leads for '%s'", len(leads), companyName)
 	return leads, nil
 }
 
 // GetAllLeads returns all stored leads
 func (ls *LeadService) GetAllLeads(ctx context.Context) ([]models.Lead, error) {
 	collection := ls.db.Instance.Collection("leads")
-
-	opts := options.Find()
-	opts.SetLimit(100)
-
+	opts := options.Find().SetLimit(100).SetSort(bson.M{"createdAt": -1})
 	cursor, err := collection.Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
-
 	var leads []models.Lead
 	if err = cursor.All(ctx, &leads); err != nil {
 		return nil, err
 	}
-
 	return leads, nil
 }
 
 // GetLeadsByRole returns leads filtered by role
 func (ls *LeadService) GetLeadsByRole(ctx context.Context, role string) ([]models.Lead, error) {
 	collection := ls.db.Instance.Collection("leads")
-
 	filter := bson.M{"role": bson.M{"$regex": role, "$options": "i"}}
-
 	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
-
 	var leads []models.Lead
 	if err = cursor.All(ctx, &leads); err != nil {
 		return nil, err
 	}
-
 	return leads, nil
 }
 
 // GetSearchHistory returns search history for a specific user
 func (ls *LeadService) GetSearchHistory(ctx context.Context, userID primitive.ObjectID) ([]models.Search, error) {
 	collection := ls.db.Instance.Collection("searches")
-
-	opts := options.Find()
-	opts.SetLimit(50)
-	opts.SetSort(bson.M{"createdAt": -1})
-
+	opts := options.Find().SetLimit(50).SetSort(bson.M{"createdAt": -1})
 	filter := bson.M{"userId": userID}
-
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
-
 	var searches []models.Search
 	if err = cursor.All(ctx, &searches); err != nil {
 		return nil, err
 	}
-
 	return searches, nil
 }
 
-// Helper functions
-
+// SaveLead saves a lead to MongoDB — fixed deduplication (uses name+company, not email)
 func (ls *LeadService) SaveLead(ctx context.Context, lead *models.Lead) error {
 	collection := ls.db.Instance.Collection("leads")
 
-	// Check if lead already exists
-	existing := collection.FindOne(ctx, bson.M{"email": lead.Email})
+	// Deduplicate by name + company (not email, since most leads have no email)
+	filter := bson.M{
+		"name":    bson.M{"$regex": "^" + lead.Name + "$", "$options": "i"},
+		"company": bson.M{"$regex": "^" + lead.Company + "$", "$options": "i"},
+	}
 
-	if existing.Err() == nil {
-		// Update existing lead
-		_, err := collection.UpdateOne(ctx, bson.M{"email": lead.Email}, bson.M{
-			"$set": lead,
-		})
+	var existing models.Lead
+	err := collection.FindOne(ctx, filter).Decode(&existing)
+	if err == nil {
+		// Lead exists — update it
+		lead.ID = existing.ID
+		lead.CreatedAt = existing.CreatedAt
+		lead.UpdatedAt = time.Now()
+		_, updateErr := collection.ReplaceOne(ctx, bson.M{"_id": existing.ID}, lead)
+		return updateErr
+	}
+
+	if err != mongo.ErrNoDocuments {
+		// Unexpected error
 		return err
 	}
 
-	// Insert new lead
-	_, err := collection.InsertOne(ctx, lead)
-	return err
+	// New lead — insert
+	if lead.ID.IsZero() {
+		lead.ID = primitive.NewObjectID()
+	}
+	lead.CreatedAt = time.Now()
+	lead.UpdatedAt = time.Now()
+	_, insertErr := collection.InsertOne(ctx, lead)
+	return insertErr
 }
 
+// DeleteAllLeads deletes all leads from MongoDB
 func (ls *LeadService) DeleteAllLeads(ctx context.Context) error {
 	collection := ls.db.Instance.Collection("leads")
 	_, err := collection.DeleteMany(ctx, bson.M{})
 	return err
 }
 
+// --- Private helpers ---
+
 func (ls *LeadService) saveSearch(ctx context.Context, search *models.Search) (interface{}, error) {
 	collection := ls.db.Instance.Collection("searches")
-
 	result, err := collection.InsertOne(ctx, search)
 	if err != nil {
 		return nil, err
 	}
-
 	return result.InsertedID, nil
 }
 
-func (ls *LeadService) updateSearchResults(ctx context.Context, searchID interface{}, count int) error {
+func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{}, count int, website string) {
 	collection := ls.db.Instance.Collection("searches")
-
-	_, err := collection.UpdateOne(ctx, bson.M{"_id": searchID}, bson.M{
-		"$set": bson.M{"resultsCount": count},
-	})
-
-	return err
+	update := bson.M{
+		"$set": bson.M{
+			"resultsCount": count,
+			"status":       "completed",
+			"website":      website,
+			"completedAt":  time.Now(),
+		},
+	}
+	collection.UpdateByID(ctx, searchID, update)
 }
 
-func (ls *LeadService) findEmailForName(name string, emails []string) string {
-	normalizedName := utils.NormalizeName(name)
-
-	for _, email := range emails {
-		localPart := strings.Split(email, "@")[0]
-		normalizedEmail := utils.NormalizeName(localPart)
-
-		if strings.Contains(normalizedEmail, normalizedName) || strings.Contains(normalizedName, normalizedEmail) {
-			return email
+// matchEmailToName checks if an email likely belongs to a person based on name
+func matchEmailToName(email, name string) bool {
+	if email == "" || name == "" {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	local := strings.ToLower(parts[0])
+	nameLower := strings.ToLower(name)
+	nameParts := strings.Fields(nameLower)
+	matchCount := 0
+	for _, part := range nameParts {
+		if len(part) > 2 && strings.Contains(local, part) {
+			matchCount++
 		}
 	}
-
-	return ""
+	// Require at least 2 name parts to match (first + last) to avoid false positives
+	return matchCount >= 2
 }
 
-func (ls *LeadService) inferRole(lead *models.Lead) string {
-	// Check email for role clues
-	if lead.Email != "" {
-		localPart := strings.Split(lead.Email, "@")[0]
-		localLower := strings.ToLower(localPart)
-
-		if strings.Contains(localLower, "ceo") || strings.Contains(localLower, "founder") {
-			return "CEO"
-		}
-		if strings.Contains(localLower, "cto") {
-			return "CTO"
-		}
-		if strings.Contains(localLower, "hr") {
-			return "HR Manager"
-		}
-		if strings.Contains(localLower, "sales") {
-			return "Sales"
-		}
+func minInt(a, b int) int {
+	if a < b {
+		return a
 	}
-
-	// Check name for role clues (e.g., "John Doe, CEO")
-	if lead.Name != "" {
-		nameLower := strings.ToLower(lead.Name)
-
-		roleKeywords := []string{"ceo", "cto", "cfo", "founder", "president", "manager", "director", "engineer", "developer"}
-		for _, keyword := range roleKeywords {
-			if strings.Contains(nameLower, keyword) {
-				return strings.ToUpper(keyword)
-			}
-		}
-	}
-
-	// Default role
-	return "Executive"
-}
-
-// scoreByRole returns the score for a role
-func (ls *LeadService) scoreByRole(role string) int {
-	switch strings.ToUpper(role) {
-	case "CEO":
-		return 95
-	case "CTO":
-		return 90
-	case "HR":
-		return 80
-	case "FOUNDER":
-		return 95
-	case "PRESIDENT":
-		return 90
-	case "VP":
-		return 85
-	case "DIRECTOR":
-		return 80
-	default:
-		return 70
-	}
-}
-
-func deduplicateStrings(slice []string) []string {
-	uniqueMap := make(map[string]bool)
-	var result []string
-
-	for _, item := range slice {
-		if !uniqueMap[item] && item != "" {
-			uniqueMap[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
+	return b
 }
 
 // ValidationError is a custom error for validation failures
@@ -462,122 +421,4 @@ type ValidationError struct {
 
 func (ve *ValidationError) Error() string {
 	return ve.Message
-}
-
-func isValidEmail(email string) bool {
-	blocked := []string{"noreply", "support", "info", "admin"}
-
-	for _, b := range blocked {
-		if strings.Contains(strings.ToLower(email), b) {
-			return false
-		}
-	}
-	return true
-}
-
-func guessRole(email string) string {
-	email = strings.ToLower(email)
-
-	if strings.Contains(email, "ceo") || strings.Contains(email, "founder") {
-		return "CEO"
-	}
-	if strings.Contains(email, "cto") || strings.Contains(email, "tech") {
-		return "CTO"
-	}
-	if strings.Contains(email, "hr") || strings.Contains(email, "people") {
-		return "HR"
-	}
-	if strings.Contains(email, "sales") {
-		return "Sales"
-	}
-
-	return "Employee"
-}
-
-func calculateScore(role string) int {
-	switch role {
-	case "CEO":
-		return 95
-	case "CTO":
-		return 90
-	case "HR":
-		return 80
-	case "Sales":
-		return 75
-	default:
-		return 60
-	}
-}
-
-func matchLinkedIn(name string, links []string) string {
-	normalized := utils.NormalizeName(name)
-	firstName := strings.Split(normalized, "-")[0]
-
-	for _, link := range links {
-		l := strings.ToLower(link)
-
-		if strings.Contains(l, normalized) || strings.Contains(l, firstName) {
-			return link
-		}
-	}
-	return ""
-}
-
-func GetLeads(domain string) []models.Lead {
-	linkedinHTML := scraper.SearchGoogle("site:linkedin.com/in " + domain + " CEO")
-	linkedinLinks := scraper.ExtractLinkedInLinks(linkedinHTML)
-
-	emails := scraper.ExtractEmails(domain)
-
-	html := scraper.SearchGoogle(domain + " company CEO")
-	names := scraper.ExtractNamesFromGoogle(html)
-
-	var leads []models.Lead
-	seen := make(map[string]bool)
-
-	// better name selection
-	bestName := ""
-	for _, n := range names {
-		if len(n) > 5 {
-			bestName = n
-			break
-		}
-	}
-
-	for _, email := range emails {
-		if !isValidEmail(email) {
-			continue
-		}
-
-		if seen[email] {
-			continue
-		}
-		seen[email] = true
-
-		var name string
-		if bestName != "" {
-			name = bestName
-		} else {
-			name = utils.ExtractNameFromEmail(email)
-		}
-
-		linkedin := matchLinkedIn(name, linkedinLinks)
-
-		role := guessRole(email)
-		score := calculateScore(role)
-
-		leads = append(leads, models.Lead{
-			Name:     name,
-			Role:     role,
-			Email:    email,
-			LinkedIn: linkedin,
-			Score:    score,
-		})
-
-		if len(leads) >= 10 {
-			break
-		}
-	}
-
-	return leads
 }

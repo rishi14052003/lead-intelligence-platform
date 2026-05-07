@@ -12,7 +12,7 @@ type Config struct {
 	ServerPort   string
 	Environment  string
 	ClientURL    string
-	ApolloAPIKey string
+	GeminiAPIKey string
 }
 
 var appConfig *Config
@@ -27,7 +27,7 @@ func LoadConfig() *Config {
 		ServerPort:   getEnv("SERVER_PORT", "8080"),
 		Environment:  getEnv("ENVIRONMENT", "development"),
 		ClientURL:    getEnv("CLIENT_URL", "http://localhost:5173"),
-		ApolloAPIKey: getEnv("APOLLO_API_KEY", ""),
+		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 	}
 
 	return appConfig

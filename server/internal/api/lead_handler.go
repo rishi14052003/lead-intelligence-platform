@@ -11,6 +11,7 @@ import (
 	"lead-finder/internal/database"
 	"lead-finder/internal/models"
 
+	"github.com/go-chi/chi/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -265,5 +266,76 @@ func SaveLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": fmt.Sprintf("Saved %d leads", savedCount),
 		"count":   savedCount,
+	})
+}
+
+// GetCompanyLeadsHandler handles GET /leads/company/:id
+func GetCompanyLeadsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	userID, ok := r.Context().Value("userID").(string)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Unauthorized"})
+		return
+	}
+
+	company := chi.URLParam(r, "id")
+	if company == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Company ID is required"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := database.Get()
+	collection := db.Instance.Collection("leads")
+
+	userObjectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Invalid user ID"})
+		return
+	}
+
+	filter := bson.M{"userId": userObjectID, "company": bson.M{"$regex": company, "$options": "i"}}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(LeadsResponse{
+			Success: false,
+			Message: "Failed to fetch company leads",
+			Data:    []models.Lead{},
+			Count:   0,
+		})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	leads := []models.Lead{}
+	if err = cursor.All(ctx, &leads); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(LeadsResponse{
+			Success: false,
+			Message: "Failed to decode company leads",
+			Data:    []models.Lead{},
+			Count:   0,
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(LeadsResponse{
+		Success: true,
+		Message: "Company leads fetched successfully",
+		Data:    leads,
+		Count:   len(leads),
 	})
 }
