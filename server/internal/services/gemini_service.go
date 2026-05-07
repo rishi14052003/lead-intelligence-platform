@@ -37,7 +37,7 @@ type GeminiPart struct {
 
 // GeminiGenerationConfig controls response format
 type GeminiGenerationConfig struct {
-	ResponseMimeType string `json:"responseMimeType"`
+	ResponseMimeType string  `json:"responseMimeType"`
 	Temperature      float64 `json:"temperature"`
 }
 
@@ -120,7 +120,6 @@ func (gs *GeminiService) EnrichLeads(companyName, website string, linkedinData, 
 		return nil, fmt.Errorf("gemini api request failed: %w", err)
 	}
 	defer resp.Body.Close()
-
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	if err != nil {
 		return nil, err
