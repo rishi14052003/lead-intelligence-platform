@@ -82,7 +82,6 @@ export default function SearchPage() {
         domain: trimmed,
         date: new Date().toLocaleDateString(),
         leadsFound: searchResults.length,
-        leads: searchResults,
       });
       navigate("/results");
     } catch {

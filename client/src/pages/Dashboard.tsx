@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { Users, Bookmark, Search, TrendingUp, Clock, Grid } from "lucide-react";
+import { Users, Bookmark, Search, TrendingUp, Clock, Grid, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useHistoryStore } from "../store/historyStore";
 import { useLeadStore } from "../store/leadStore";
@@ -276,7 +276,7 @@ export default function Dashboard() {
   const [companiesPage, setCompaniesPage] = useState(1);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllCompanies, setShowAllCompanies] = useState(false);
-  const { history, loadFromLocalStorage } = useHistoryStore();
+  const { history, loadFromLocalStorage, removeHistoryItem, removeHistoryByDomain } = useHistoryStore();
   const { leads: savedLeads, fetchSavedLeads } = useLeadStore();
 
   useEffect(() => {
@@ -555,13 +555,6 @@ export default function Dashboard() {
                       }}>
                         {historyStartIndex + i + 1}
                       </div>
-                      <div style={{
-                        width: "38px", height: "38px", borderRadius: "10px", flexShrink: 0,
-                        background: "linear-gradient(135deg, rgba(108,99,255,0.25), rgba(108,99,255,0.1))",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <Search size={17} style={{ color: "var(--accent)" }} />
-                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           fontSize: "14px", fontWeight: "600", color: "var(--text1)",
@@ -570,7 +563,6 @@ export default function Dashboard() {
                           {h.domain}
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--text2)", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <Clock size={11} style={{ opacity: 0.75 }} />
                           <span>{h.date}</span>
                           <span style={{ opacity: 0.6 }}>·</span>
                           <span style={{ color: "var(--text1)", fontWeight: "600" }}>{h.leadsFound} leads</span>
@@ -578,15 +570,25 @@ export default function Dashboard() {
                       </div>
                     </div>
                     {/* Right: Badge */}
-                    <div style={{
-                      minWidth: "34px", height: "34px", borderRadius: "9px", flexShrink: 0,
-                      background: "linear-gradient(135deg, var(--accent), var(--accent2))",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: "700", fontSize: "14px", color: "#fff",
-                      boxShadow: "0 3px 10px rgba(108,99,255,0.35)",
-                    }}>
-                      {h.leadsFound}
-                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm btn-icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeHistoryItem(h.id);
+                      }}
+                      title="Delete this activity"
+                      style={{
+                        minWidth: "34px",
+                        height: "34px",
+                        borderRadius: "9px",
+                        flexShrink: 0,
+                        color: "var(--text2)",
+                      }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 ))}
                 {showAllHistory && totalHistoryPages > 1 && (
@@ -673,13 +675,6 @@ export default function Dashboard() {
                       }}>
                         {companyStartIndex + i + 1}
                       </div>
-                      <div style={{
-                        width: "38px", height: "38px", borderRadius: "10px", flexShrink: 0,
-                        background: "linear-gradient(135deg, rgba(168,85,247,0.25), rgba(168,85,247,0.1))",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <Bookmark size={17} style={{ color: "var(--accent2)" }} />
-                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
                           fontSize: "14px", fontWeight: "600", color: "var(--text1)",
@@ -688,20 +683,26 @@ export default function Dashboard() {
                           {company.company}
                         </div>
                         <div style={{ fontSize: "12px", color: "var(--text2)", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <TrendingUp size={11} style={{ opacity: 0.75 }} />
                           <span style={{ color: "var(--text1)", fontWeight: "600" }}>{company.leads} leads total</span>
                         </div>
                       </div>
                     </div>
-                    <div style={{
-                      minWidth: "36px", height: "36px", borderRadius: "9px", flexShrink: 0,
-                      background: "linear-gradient(135deg, var(--accent2), var(--accent))",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: "700", fontSize: "14px", color: "#fff",
-                      boxShadow: "0 3px 10px rgba(168,85,247,0.3)",
-                    }}>
-                      {company.leads}
-                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm btn-icon"
+                      onClick={() => removeHistoryByDomain(company.company)}
+                      title="Delete this company from activity"
+                      style={{
+                        minWidth: "36px",
+                        height: "36px",
+                        borderRadius: "9px",
+                        flexShrink: 0,
+                        color: "var(--text2)",
+                      }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 ))}
                 {showAllCompanies && totalCompanyPages > 1 && (

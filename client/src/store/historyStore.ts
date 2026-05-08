@@ -6,13 +6,15 @@ export interface HistoryItem {
   domain: string;
   date: string;
   leadsFound: number;
-  leads: any[];
+  leads?: any[];
 }
 
 type State = {
   history: HistoryItem[];
   loading: boolean;
   addHistory: (item: HistoryItem) => void;
+  removeHistoryItem: (id: string) => void;
+  removeHistoryByDomain: (domain: string) => void;
   clearHistory: () => void;
   loadFromLocalStorage: () => void;
 };
@@ -24,16 +26,37 @@ function getStorageKey(): string | null {
   return user ? `search_history_${user.id}` : null;
 }
 
+function persistHistory(history: HistoryItem[]): void {
+  const key = getStorageKey();
+  if (key) {
+    localStorage.setItem(key, JSON.stringify(history));
+  }
+}
+
 export const useHistoryStore = create<State>((set) => ({
   history: [],
   loading: false,
   addHistory: (item: HistoryItem) => {
     set((state) => {
-      const key = getStorageKey();
       const newHistory = [item, ...state.history].slice(0, 50); // Keep last 50 items
-      if (key) {
-        localStorage.setItem(key, JSON.stringify(newHistory));
-      }
+      persistHistory(newHistory);
+      return { history: newHistory };
+    });
+  },
+  removeHistoryItem: (id: string) => {
+    set((state) => {
+      const newHistory = state.history.filter((item) => item.id !== id);
+      persistHistory(newHistory);
+      return { history: newHistory };
+    });
+  },
+  removeHistoryByDomain: (domain: string) => {
+    set((state) => {
+      const targetDomain = domain.trim().toLowerCase();
+      const newHistory = state.history.filter(
+        (item) => item.domain.trim().toLowerCase() !== targetDomain
+      );
+      persistHistory(newHistory);
       return { history: newHistory };
     });
   },

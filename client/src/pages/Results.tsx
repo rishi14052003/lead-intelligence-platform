@@ -88,12 +88,6 @@ export default function Results() {
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
-  const loadFromLocalStorage = useLeadStore((s) => s.loadFromLocalStorage);
-  
-  // Load from localStorage on mount
-  useEffect(() => {
-    loadFromLocalStorage();
-  }, [loadFromLocalStorage]);
   
   // Load saved lead IDs on mount to check which are already saved
   useEffect(() => {
@@ -117,6 +111,14 @@ export default function Results() {
   
   const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
+
+  const getLeadId = (lead: { id?: string }) =>
+    lead.id && lead.id !== "000000000000000000000000" ? lead.id : null;
+
+  const isLeadSaved = (lead: { id?: string }) => {
+    const id = getLeadId(lead);
+    return id ? savedLeadIds.has(id) : false;
+  };
 
   // Calculate pagination
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -157,7 +159,8 @@ export default function Results() {
 
   const handleSaveSingle = async (lead: any) => {
     // Check if lead is already saved
-    const isSaved = savedLeadIds.has(lead.id || lead.email || lead.name);
+    const isSaved = isLeadSaved(lead);
+    const leadId = getLeadId(lead);
     
     if (isSaved) {
       // Unsave the lead
@@ -166,7 +169,10 @@ export default function Results() {
         message: `Are you sure you want to unsave this lead?`,
         onConfirm: async () => {
           try {
-            await deleteLead(lead.id || "");
+            if (!leadId) {
+              throw new Error("Missing lead id for unsave");
+            }
+            await deleteLead(leadId);
             await refreshSavedIds();
             setDialogOpen(false);
           } catch (error) {
@@ -325,15 +331,15 @@ export default function Results() {
                               handleSaveSingle(lead);
                             }}
                             style={{ 
-                              color: savedLeadIds.has(lead.id || lead.email || lead.name) ? "var(--accent)" : "var(--text2)",
-                              opacity: savedLeadIds.has(lead.id || lead.email || lead.name) ? 1 : 0.6
+                              color: isLeadSaved(lead) ? "var(--accent)" : "var(--text2)",
+                              opacity: isLeadSaved(lead) ? 1 : 0.6
                             }}
-                            title={savedLeadIds.has(lead.id || lead.email || lead.name) ? "Click to unsave" : "Click to save"}
+                            title={isLeadSaved(lead) ? "Click to unsave" : "Click to save"}
                           >
                             <Bookmark 
                               size={20} 
-                              fill={savedLeadIds.has(lead.id || lead.email || lead.name) ? "currentColor" : "none"} 
-                              strokeWidth={savedLeadIds.has(lead.id || lead.email || lead.name) ? 0 : 2}
+                              fill={isLeadSaved(lead) ? "currentColor" : "none"} 
+                              strokeWidth={isLeadSaved(lead) ? 0 : 2}
                             />
                           </button>
                         </div>

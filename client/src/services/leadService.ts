@@ -26,7 +26,9 @@ export async function getSavedLeadIds(): Promise<string[]> {
 	try {
 		const response = await api.get<{ data: Lead[], count: number }>("/leads");
 		const leads = response.data.data || [];
-		return leads.map(l => l.id || l.email || l.name).filter(Boolean);
+		return leads
+			.map((l) => l.id)
+			.filter((id): id is string => Boolean(id) && id !== "000000000000000000000000");
 	} catch (error) {
 		console.error("Error fetching saved lead IDs:", error);
 		return [];

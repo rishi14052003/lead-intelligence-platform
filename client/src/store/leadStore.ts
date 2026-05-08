@@ -19,16 +19,7 @@ type State = {
   clearLeads: () => void;
 
   clearAllSavedLeads: () => Promise<void>;
-
-  loadFromLocalStorage: () => void;
 };
-
-const LEGACY_KEY = "search_results";
-
-function getStorageKey(): string | null {
-  const user = useAuthStore.getState().user;
-  return user ? `search_results_${user.id}` : null;
-}
 
 export const useLeadStore = create<State>((set) => ({
   leads: [],
@@ -73,19 +64,6 @@ export const useLeadStore = create<State>((set) => ({
         leads,
         loading: false,
       });
-
-      // Save to localStorage
-      const key = getStorageKey();
-
-      if (key) {
-
-        console.log("💾 SAVING TO LOCAL STORAGE:", key);
-
-        localStorage.setItem(
-          key,
-          JSON.stringify(leads)
-        );
-      }
 
       return leads;
 
@@ -166,14 +144,6 @@ export const useLeadStore = create<State>((set) => ({
 
     console.log("🗑 CLEARING LEADS");
 
-    const key = getStorageKey();
-
-    if (key) {
-      localStorage.removeItem(key);
-    }
-
-    localStorage.removeItem(LEGACY_KEY);
-
     set({
       leads: [],
       error: null,
@@ -223,56 +193,6 @@ export const useLeadStore = create<State>((set) => ({
       });
     }
   },
-
-  loadFromLocalStorage: () => {
-
-    console.log("📂 LOADING FROM LOCAL STORAGE");
-
-    try {
-
-      const key = getStorageKey();
-
-      if (!key) {
-
-        console.log("❌ NO STORAGE KEY");
-
-        set({
-          leads: [],
-        });
-
-        return;
-      }
-
-      const stored = localStorage.getItem(key);
-
-      if (stored) {
-
-        const leads = JSON.parse(stored);
-
-        console.log("✅ LOADED LEADS:", leads);
-
-        set({
-          leads,
-        });
-
-      } else {
-
-        console.log("❌ NO SAVED LEADS");
-
-        set({
-          leads: [],
-        });
-      }
-
-    } catch (err) {
-
-      console.error("❌ LOCAL STORAGE ERROR:", err);
-
-      set({
-        leads: [],
-      });
-    }
-  },
 }));
 
 // Subscribe to auth changes
@@ -282,13 +202,7 @@ useAuthStore.subscribe((state, prevState) => {
 
   if (state.user?.id !== prevState.user?.id) {
 
-    if (state.user) {
-
-      console.log("✅ USER LOGGED IN");
-
-      useLeadStore.getState().loadFromLocalStorage();
-
-    } else {
+    if (!state.user) {
 
       console.log("❌ USER LOGGED OUT");
 
