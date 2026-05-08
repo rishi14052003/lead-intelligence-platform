@@ -445,10 +445,10 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="stats-grid stats-4">
-        <StatCard label="Total Leads" value="0" icon={Users} iconVariant="violet" />
-        <StatCard label="Saved Leads" value="0" icon={Bookmark} iconVariant="violet" />
-        <StatCard label="Searches" value="0" icon={Search} iconVariant="violet" />
-        <StatCard label="Conversion" value="0%" icon={TrendingUp} iconVariant="violet" />
+        <StatCard label="Total Leads" value={String(leadsFoundCount)} icon={Users} iconVariant="violet" />
+        <StatCard label="Saved Leads" value={String(leadsSavedCount)} icon={Bookmark} iconVariant="violet" />
+        <StatCard label="Searches" value={String(searchesCount)} icon={Search} iconVariant="violet" />
+        <StatCard label="Conversion" value={`${saveRatePercent}%`} icon={TrendingUp} iconVariant="violet" />
       </div>
 
       {/* Quick Actions */}
