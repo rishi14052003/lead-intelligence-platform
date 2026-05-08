@@ -1,8 +1,8 @@
 package scraper
 
 import (
+	"log"
 	"strings"
-
 	"lead-finder/internal/utils"
 )
 
@@ -13,7 +13,7 @@ type LinkedInParser struct {
 
 // NewLinkedInParser creates a new LinkedIn parser instance
 func NewLinkedInParser() *LinkedInParser {
-	return &LinkedInParser{
+	return &LinkedInParser{	
 		googleScraper: NewGoogleScraper(),
 	}
 }
@@ -24,6 +24,7 @@ func (lp *LinkedInParser) SearchProfiles(company string, role string) ([]map[str
 }
 
 // SearchLinkedInByRoleWithValidation searches and validates profiles — fixed to not over-filter
+// SearchLinkedInByRoleWithValidation searches and validates profiles
 func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, role string) ([]map[string]string, error) {
 	profiles, err := lp.googleScraper.SearchLinkedInProfiles(company, role)
 	if err != nil {
@@ -34,31 +35,46 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 	seen := make(map[string]bool)
 
 	for _, p := range profiles {
-		name := p["name"]
-		url := p["url"]
-		detectedRole := p["role"]
+
+		log.Printf("🔍 RAW PROFILE: %+v", p)
+
+		name := strings.TrimSpace(p["name"])
+		url := strings.TrimSpace(p["url"])
+		detectedRole := strings.TrimSpace(p["role"])
 
 		if url == "" {
+			log.Printf("❌ EMPTY URL")
 			continue
 		}
+
 		if seen[url] {
+			log.Printf("❌ DUPLICATE URL: %s", url)
 			continue
 		}
+
 		seen[url] = true
 
-		// Skip profiles with clearly bad names
-		if name == "" || len(name) < 2 || strings.ToLower(name) == "unknown" {
-			// Try to derive name from URL
+		// Try extracting name from URL if missing
+		if name == "" || strings.ToLower(name) == "unknown" {
 			name = parseNameFromLinkedInURL(url)
-			if name == "" {
-				continue
-			}
 		}
 
-		// Use the searched role if detected role is empty
+		// Clean LinkedIn junk
+		name = strings.ReplaceAll(name, "| LinkedIn", "")
+		name = strings.ReplaceAll(name, "- LinkedIn", "")
+		name = strings.TrimSpace(name)
+
+		// Validate name
+		if !utils.ValidateName(name) {
+			log.Printf("❌ INVALID NAME: %s", name)
+			continue
+		}
+
 		if detectedRole == "" {
 			detectedRole = role
 		}
+
+		log.Printf("✅ VALID PROFILE: NAME=%s ROLE=%s URL=%s", name, detectedRole, url)
 
 		validated = append(validated, map[string]string{
 			"name": name,
@@ -66,6 +82,8 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 			"role": detectedRole,
 		})
 	}
+
+	log.Printf("✅ TOTAL VALIDATED PROFILES: %d", len(validated))
 
 	return validated, nil
 }

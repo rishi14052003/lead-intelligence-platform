@@ -43,22 +43,55 @@ func ValidateDomain(domain string) bool {
 // ValidateName validates a person's name
 func ValidateName(name string) bool {
 	name = strings.TrimSpace(name)
+
 	if name == "" {
 		return false
 	}
 
-	// Name should have at least 2 characters
+	// Remove common LinkedIn junk
+	name = strings.ReplaceAll(name, "| LinkedIn", "")
+	name = strings.ReplaceAll(name, "- LinkedIn", "")
+	name = strings.ReplaceAll(name, "LinkedIn", "")
+	name = strings.TrimSpace(name)
+
+	// Minimum length
 	if len(name) < 2 {
 		return false
 	}
 
-	// Name should not exceed 100 characters
-	if len(name) > 100 {
+	// Maximum length
+	if len(name) > 120 {
 		return false
 	}
 
-	// Check for valid characters (letters, spaces, hyphens, apostrophes)
-	validNameRegex := regexp.MustCompile(`^[a-zA-Z\s\-']+$`)
+	// Reject obvious garbage
+	lower := strings.ToLower(name)
+
+	invalidWords := []string{
+		"linkedin",
+		"profile",
+		"sign in",
+		"login",
+		"directory",
+		"people",
+		"members",
+	}
+
+	for _, word := range invalidWords {
+		if strings.Contains(lower, word) {
+			return false
+		}
+	}
+
+	// Allow:
+	// letters
+	// spaces
+	// dots
+	// hyphens
+	// apostrophes
+	// unicode chars
+	validNameRegex := regexp.MustCompile(`^[\p{L}\s\.\-']+$`)
+
 	return validNameRegex.MatchString(name)
 }
 

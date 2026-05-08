@@ -104,6 +104,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		roles := []string{"CEO", "CTO", "Founder", "HR"}
 		for _, role := range roles {
 			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
 			if err != nil {
 				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
 				continue
@@ -250,13 +251,30 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	// Step 8: Finalise leads list
 	var leads []models.Lead
+
 	for _, lead := range leadsMap {
-		if lead.Name == "" || strings.ToLower(lead.Name) == "unknown" || len(lead.Name) < 3 {
+
+		log.Printf("📌 CHECKING LEAD: %+v", lead)
+
+		// Clean LinkedIn junk
+		lead.Name = strings.ReplaceAll(lead.Name, "| LinkedIn", "")
+		lead.Name = strings.ReplaceAll(lead.Name, "- LinkedIn", "")
+		lead.Name = strings.TrimSpace(lead.Name)
+
+		// Validate name
+		if !utils.ValidateName(lead.Name) {
+			log.Printf("❌ INVALID LEAD NAME: %s", lead.Name)
 			continue
 		}
+
 		lead.UserID = userID
+
+		log.Printf("✅ FINAL LEAD ADDED: %s | %s", lead.Name, lead.Role)
+
 		leads = append(leads, *lead)
 	}
+
+	log.Printf("🎯 FINAL LEADS COUNT: %d", len(leads))
 
 	// Step 9: Store in MongoDB
 	for i := range leads {

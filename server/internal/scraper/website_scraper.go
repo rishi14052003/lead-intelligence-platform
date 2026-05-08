@@ -131,8 +131,7 @@ func (ws *WebScraper) ScrapeCompanyInfo(domain string) (map[string]string, error
 
 	return info, nil
 }
-
-func (ws *WebScraper) extractSocialLinks(html, baseURL string) []string {
+func (ws *WebScraper) extractSocialLinks(html, _ string) []string {
 	var links []string
 	re := regexp.MustCompile(`https?://(?:www\.)?(?:linkedin|twitter|x|facebook|instagram)\.com/[^\s"]+`)
 	matches := re.FindAllString(html, -1)

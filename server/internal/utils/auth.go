@@ -115,13 +115,19 @@ func VerifyJWT(tokenString string) (map[string]interface{}, error) {
 	return payload, nil
 }
 
-// generateRandomSecret generates a random secret for development
+var cachedSecret string
+
 func generateRandomSecret() string {
+	if cachedSecret != "" {
+		return cachedSecret
+	}
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "dev-secret-key" // Fallback
+		cachedSecret = "dev-secret-key"
+		return cachedSecret
 	}
-	return base64.StdEncoding.EncodeToString(b)
+	cachedSecret = base64.StdEncoding.EncodeToString(b)
+	return cachedSecret
 }
 
 // StringToObjectID converts a string to MongoDB ObjectID

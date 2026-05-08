@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search as SearchIcon,
@@ -36,24 +36,35 @@ const FEATURES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: "01", title: "Enter Company", desc: "Type any company name to begin discovery." },
-  { step: "02", title: "AI Scrapes", desc: "We scan websites, LinkedIn, and public data." },
-  { step: "03", title: "Get Leads", desc: "Receive scored, verified decision-maker contacts." },
+  {
+    step: "01",
+    title: "Enter Company",
+    desc: "Type any company name to begin discovery.",
+  },
+  {
+    step: "02",
+    title: "AI Scrapes",
+    desc: "We scan websites, LinkedIn, and public data.",
+  },
+  {
+    step: "03",
+    title: "Get Leads",
+    desc: "Receive scored, verified decision-maker contacts.",
+  },
 ];
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [focused, setFocused] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { search, loading } = useLeadStore();
   const { addHistory } = useHistoryStore();
 
   useEffect(() => {
-    setMounted(true);
-    setTimeout(() => inputRef.current?.focus(), 600);
+    const timer = setTimeout(() => inputRef.current?.focus(), 600);
+    return () => clearTimeout(timer);
   }, []);
 
   const onSearch = async (e: React.FormEvent) => {
@@ -81,16 +92,17 @@ export default function SearchPage() {
 
   return (
     <>
-      {/* Portal-based overlay — renders directly on <body>, escapes layout */}
       {loading && <SearchProgress companyName={query} />}
 
-      <div className={`search-page-v2 ${mounted ? "mounted" : ""}`}>
+      <div className="search-page-v2 mounted">
         <div className="search-orb search-orb-1" />
         <div className="search-orb search-orb-2" />
         <div className="search-orb search-orb-3" />
 
-        {/* Hero */}
-        <div className="search-hero-v2" style={{ maxWidth: 900, paddingTop: 0 }}>
+        <div
+          className="search-hero-v2"
+          style={{ maxWidth: 900, paddingTop: 0 }}
+        >
           <h1 className="search-headline">
             Find the right
             <span className="search-headline-accent"> decision makers</span>
@@ -101,7 +113,6 @@ export default function SearchPage() {
             complete with emails, LinkedIn profiles, and AI relevance scores.
           </p>
 
-          {/* Search Card */}
           <div
             className={`search-card-v2 ${focused ? "focused" : ""} ${error ? "has-error" : ""}`}
             style={{
@@ -112,8 +123,14 @@ export default function SearchPage() {
               }),
             }}
           >
-            <form onSubmit={onSearch} style={{ outline: "none", boxShadow: "none" }}>
-              <div className="search-field-wrap" style={{ padding: "8px 8px 8px 18px" }}>
+            <form
+              onSubmit={onSearch}
+              style={{ outline: "none", boxShadow: "none" }}
+            >
+              <div
+                className="search-field-wrap"
+                style={{ padding: "8px 8px 8px 18px" }}
+              >
                 <div className="search-field-icon">
                   <SearchIcon size={19} />
                 </div>
@@ -122,7 +139,10 @@ export default function SearchPage() {
                   className="search-field-input"
                   placeholder="e.g. Stripe, OpenAI, Notion…"
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setError(""); }}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setError("");
+                  }}
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
                   disabled={loading}
@@ -156,8 +176,10 @@ export default function SearchPage() {
           </div>
         </div>
 
-        {/* How It Works + Features */}
-        <div className="search-features-section" style={{ marginTop: 12, maxWidth: 900 }}>
+        <div
+          className="search-features-section"
+          style={{ marginTop: 12, maxWidth: 900 }}
+        >
           <p className="search-features-eyebrow">How it works</p>
           <div
             style={{
@@ -191,10 +213,23 @@ export default function SearchPage() {
                 >
                   STEP {step.step}
                 </span>
-                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>
+                <div
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 700,
+                    color: "var(--text)",
+                    letterSpacing: -0.3,
+                  }}
+                >
                   {step.title}
                 </div>
-                <div style={{ fontSize: 14, color: "var(--text2)", lineHeight: 1.65 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: "var(--text2)",
+                    lineHeight: 1.65,
+                  }}
+                >
                   {step.desc}
                 </div>
               </div>
@@ -230,10 +265,16 @@ export default function SearchPage() {
                 >
                   <f.icon size={18} />
                 </div>
-                <h3 className="search-feature-title" style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}>
+                <h3
+                  className="search-feature-title"
+                  style={{ fontSize: 17, fontWeight: 700, marginTop: 0 }}
+                >
                   {f.title}
                 </h3>
-                <p className="search-feature-desc" style={{ fontSize: 14, lineHeight: 1.65, margin: 0 }}>
+                <p
+                  className="search-feature-desc"
+                  style={{ fontSize: 14, lineHeight: 1.65, margin: 0 }}
+                >
                   {f.desc}
                 </p>
               </div>

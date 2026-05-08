@@ -22,7 +22,7 @@ type LeadsRequest struct {
 
 type SaveLeadsRequest struct {
 	Leads []models.Lead `json:"leads"`
-}
+}	
 
 type LeadsResponse struct {
 	Success bool          `json:"success"`
