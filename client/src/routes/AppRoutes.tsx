@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { Search, List, BarChart3, Bookmark, Clock, Users, Bell, Settings, X, Moon, Sun } from "lucide-react";
+import { Search, List, BarChart3, Bookmark, Users, Bell, Settings, X, Moon, Sun } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import ProfileMenu from "../components/ProfileMenu";
 import ProtectedRoute from "./ProtectedRoute";
@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { id: "search", label: "Search", icon: Search },
   { id: "saved", label: "Saved Leads", icon: Bookmark },
   { id: "results", label: "Results", icon: List },
-  { id: "history", label: "History", icon: Clock },
 ];
 
 function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavigate: (page: string) => void }) {
@@ -208,16 +207,6 @@ function Layout({ children }: { children: React.ReactNode }) {
               <div className="settings-text">
                 <div className="settings-title">Saved Leads</div>
                 <div className="settings-sub">Manage your saved contacts</div>
-              </div>
-            </div>
-
-            <div className="settings-item" onClick={() => { setShowSettings(false); navigate("/history"); }}>
-              <div className="settings-icon">
-                <Clock size={16} />
-              </div>
-              <div className="settings-text">
-                <div className="settings-title">Search History</div>
-                <div className="settings-sub">View past searches</div>
               </div>
             </div>
 

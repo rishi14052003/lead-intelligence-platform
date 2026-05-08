@@ -2,7 +2,6 @@ import SearchPage from '../pages/Search';
 import Results from '../pages/Results';
 import Dashboard from '../pages/Dashboard';
 import SavedLeads from '../pages/SavedLeads';
-import History from '../pages/History';
 import Login from '../pages/Login';
 import Signup from '../pages/Signup';
 import ProfileSettings from '../pages/ProfileSettings';
@@ -39,11 +38,6 @@ export const protectedRoutes = [
   {
     path: '/saved',
     element: SavedLeads,
-    layout: true,
-  },
-  {
-    path: '/history',
-    element: History,
     layout: true,
   },
   {
