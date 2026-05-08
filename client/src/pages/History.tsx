@@ -197,28 +197,96 @@ export default function History() {
                 <>
                   <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0, minHeight: "300px" }}>
                     {displayHistory.map((h, i) => (
-                      <div key={h.id} className="history-item" onClick={() => { navigate("/results"); toggleHistorySelection(i); }} style={{ cursor: "pointer" }}>
-                        <div className="history-left">
-                          <div className="history-icon-wrapper">
-                            <Search size={19} />
+                      <div 
+                        key={h.id} 
+                        className="history-item" 
+                        onClick={() => { navigate("/results"); toggleHistorySelection(i); }} 
+                        style={{ 
+                          cursor: "pointer",
+                          background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: "12px",
+                          padding: "16px",
+                          marginBottom: "12px",
+                          transition: "all 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                          e.currentTarget.style.transform = "translateY(-2px)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                          e.currentTarget.style.transform = "translateY(0)";
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, minWidth: 0 }}>
+                            <div style={{ 
+                              width: "44px", 
+                              height: "44px", 
+                              borderRadius: "12px", 
+                              background: "linear-gradient(135deg, rgba(108,99,255,0.2) 0%, rgba(108,99,255,0.1) 100%)",
+                              display: "flex", 
+                              alignItems: "center", 
+                              justifyContent: "center",
+                              flexShrink: 0
+                            }}>
+                              <Search size={20} style={{ color: "var(--accent)" }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: "15px", 
+                                fontWeight: "600", 
+                                color: "var(--text1)",
+                                marginBottom: "4px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              }}>
+                                {h.domain}
+                              </div>
+                              <div style={{ 
+                                fontSize: "13px", 
+                                color: "var(--text3)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px"
+                              }}>
+                                <Clock size={12} style={{ opacity: 0.6 }} />
+                                <span>{h.date}</span>
+                                <span style={{ opacity: 0.4 }}>·</span>
+                                <span style={{ color: "var(--accent2)", fontWeight: "500" }}>{h.leadsFound} leads found</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="history-content">
-                            <div className="history-domain">{h.domain}</div>
-                            <div className="history-meta">{h.date} · {h.leadsFound} leads found</div>
-                          </div>
-                        </div>
-                        <div className="history-right">
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
                             {selectedHistory.has(i) && (
                               <div style={{ 
-                                width: 8, 
-                                height: 8, 
+                                width: "10", 
+                                height: "10", 
                                 borderRadius: "50%", 
-                                backgroundColor: "#3b82f6",
-                                flexShrink: 0
+                                background: "var(--accent)",
+                                flexShrink: 0,
+                                boxShadow: "0 0 8px rgba(108,99,255,0.5)"
                               }} />
                             )}
-                            <div className="history-badge">{h.leadsFound}</div>
+                            <div style={{ 
+                              width: "40px", 
+                              height: "40px", 
+                              borderRadius: "10px", 
+                              background: "linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%)",
+                              display: "flex", 
+                              alignItems: "center", 
+                              justifyContent: "center",
+                              fontWeight: "700",
+                              fontSize: "16px",
+                              color: "white",
+                              boxShadow: "0 4px 12px rgba(108,99,255,0.3)"
+                            }}>
+                              {h.leadsFound}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -289,18 +357,72 @@ export default function History() {
                 <>
                   <div className="history-list" style={{ flex: 1, overflowY: "auto", marginBottom: 0, minHeight: "300px" }}>
                     {displayCompanies.map((c, i) => (
-                      <div key={i} className="history-item" style={{ cursor: "default" }}>
-                        <div className="history-left">
-                          <div className="history-icon-wrapper" style={{ background: "rgba(108,99,255,0.15)", color: "var(--accent2)" }}>
-                            <Bookmark size={19} />
+                      <div 
+                        key={i} 
+                        style={{ 
+                          cursor: "default",
+                          background: "linear-gradient(135deg, rgba(108,99,255,0.08) 0%, rgba(108,99,255,0.04) 100%)",
+                          border: "1px solid rgba(108,99,255,0.15)",
+                          borderRadius: "12px",
+                          padding: "16px",
+                          marginBottom: "12px",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, minWidth: 0 }}>
+                            <div style={{ 
+                              width: "44px", 
+                              height: "44px", 
+                              borderRadius: "12px", 
+                              background: "linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(168,85,247,0.1) 100%)",
+                              display: "flex", 
+                              alignItems: "center", 
+                              justifyContent: "center",
+                              flexShrink: 0
+                            }}>
+                              <Bookmark size={20} style={{ color: "var(--accent2)" }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: "15px", 
+                                fontWeight: "600", 
+                                color: "var(--text1)",
+                                marginBottom: "4px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              }}>
+                                {c.company}
+                              </div>
+                              <div style={{ 
+                                fontSize: "13px", 
+                                color: "var(--text3)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px"
+                              }}>
+                                <TrendingUp size={12} style={{ opacity: 0.6 }} />
+                                <span style={{ color: "var(--accent2)", fontWeight: "500" }}>{c.leads} leads found</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="history-content">
-                            <div className="history-domain">{c.company}</div>
-                            <div className="history-meta">{c.leads} leads found</div>
+                          <div style={{ 
+                            width: "40px", 
+                            height: "40px", 
+                            borderRadius: "10px", 
+                            background: "linear-gradient(135deg, var(--accent2) 0%, var(--accent) 100%)",
+                            display: "flex", 
+                            alignItems: "center", 
+                            justifyContent: "center",
+                            fontWeight: "700",
+                            fontSize: "16px",
+                            color: "white",
+                            boxShadow: "0 4px 12px rgba(168,85,247,0.3)",
+                            flexShrink: 0
+                          }}>
+                            {c.leads}
                           </div>
-                        </div>
-                        <div className="history-right">
-                          <div className="history-badge">{c.leads}</div>
                         </div>
                       </div>
                     ))}

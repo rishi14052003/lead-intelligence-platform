@@ -67,7 +67,7 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role string) ([]map[str
 
 // searchViaSerper uses Serper API
 func (gs *GoogleScraper) searchViaSerper(query, role string) ([]map[string]string, error) {
-	payload := fmt.Sprintf(`{"q":"%s","num":10}`, query)
+	payload := fmt.Sprintf(`{"q":"%s"}`, query)
 
 	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(payload))
 	if err != nil {
@@ -137,7 +137,7 @@ func (gs *GoogleScraper) searchViaSerper(query, role string) ([]map[string]strin
 // FindOfficialWebsite searches official company website
 func (gs *GoogleScraper) FindOfficialWebsite(company string) (string, error) {
 	query := fmt.Sprintf(`"%s" official website`, company)
-	payload := fmt.Sprintf(`{"q":"%s","num":5}`, query)
+	payload := fmt.Sprintf(`{"q":"%s"}`, query)
 
 	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(payload))
 	if err != nil {

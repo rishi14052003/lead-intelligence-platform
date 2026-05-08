@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Users, Mail, Link, Bookmark, Download, Filter, Globe, Trash2 } from "lucide-react";
+import { Search, Users, Mail, Link, Bookmark, Filter, Globe, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { saveLeads } from "../services/leadService";
@@ -115,7 +115,7 @@ export default function Results() {
     setCurrentPage(1);
   }, [filter, leads.length]);
   
-  const roles = ["All", "CEO", "CTO", "HR"];
+  const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
 
   // Calculate pagination
@@ -304,7 +304,9 @@ export default function Results() {
                       </td>
                       <td>
                         {lead.linkedin
-                          ? <a href={lead.linkedin} className="linkedin-link"><Link size={12} /> Profile</a>
+                          ? <a href={lead.linkedin} className="linkedin-link" target="_blank" rel="noopener noreferrer" title={lead.linkedin}>
+                              <Link size={12} /> {lead.linkedin}
+                            </a>
                           : <span className="muted">-</span>}
                       </td>
                       <td>
@@ -322,11 +324,18 @@ export default function Results() {
                               e.stopPropagation();
                               handleSaveSingle(lead);
                             }}
-                            style={{ color: savedLeadIds.has(lead.id || lead.email || lead.name) ? "var(--accent)" : undefined }}
+                            style={{ 
+                              color: savedLeadIds.has(lead.id || lead.email || lead.name) ? "var(--accent)" : "var(--text2)",
+                              opacity: savedLeadIds.has(lead.id || lead.email || lead.name) ? 1 : 0.6
+                            }}
+                            title={savedLeadIds.has(lead.id || lead.email || lead.name) ? "Click to unsave" : "Click to save"}
                           >
-                            <Bookmark size={24} fill={savedLeadIds.has(lead.id || lead.email || lead.name) ? "currentColor" : "none"} />
+                            <Bookmark 
+                              size={20} 
+                              fill={savedLeadIds.has(lead.id || lead.email || lead.name) ? "currentColor" : "none"} 
+                              strokeWidth={savedLeadIds.has(lead.id || lead.email || lead.name) ? 0 : 2}
+                            />
                           </button>
-                          <button className="btn btn-ghost btn-sm btn-icon"><Download size={24} /></button>
                         </div>
                       </td>
                     </tr>

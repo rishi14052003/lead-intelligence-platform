@@ -99,7 +99,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	go func() {
 		var allProfiles []map[string]string
-		roles := []string{"CEO", "CTO", "HR", "Head of Sales", "Vice President"}
+		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
 		for _, role := range roles {
 			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
@@ -262,12 +262,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	log.Printf("🎯 FINAL LEADS COUNT: %d", len(leads))
 
-	// Step 9: Store in MongoDB
-	for i := range leads {
-		if err := ls.SaveLead(ctx, &leads[i]); err != nil {
-			log.Printf("⚠️ Error saving lead %s: %v", leads[i].Name, err)
-		}
-	}
+	// Step 9: Leads are NOT auto-saved to database - only saved when user explicitly clicks save
 
 	// Step 10: Update search record
 	ls.finaliseSearch(ctx, searchID, len(leads), website)
