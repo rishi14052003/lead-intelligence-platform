@@ -65,14 +65,14 @@ func NewGrokService(apiKey string) *GrokService {
 
 func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, websiteData []map[string]string, websiteText string) (*EnrichedCompany, error) {
 	if gs.apiKey == "" {
-		return nil, fmt.Errorf("grok api key not configured")
+		return nil, fmt.Errorf("mistral api key not configured")
 	}
 
 	hasScrapedData := len(linkedinData) > 0 || len(websiteData) > 0 || len(websiteText) > 100
 	prompt := buildGrokPrompt(companyName, website, linkedinData, websiteData, websiteText, hasScrapedData)
 
 	reqBody := GrokRequest{
-		Model: "grok-3-mini",
+		Model: "mistral-small-latest",
 		Messages: []GrokMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -85,7 +85,7 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", "https://api.x.ai/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", "https://api.mistral.ai/v1/chat/completions", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 
 	resp, err := gs.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("grok api request failed: %w", err)
+		return nil, fmt.Errorf("mistral api request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -104,16 +104,16 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("grok api returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("mistral api returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var grokResp GrokResponse
 	if err := json.Unmarshal(body, &grokResp); err != nil {
-		return nil, fmt.Errorf("failed to parse grok response: %w", err)
+		return nil, fmt.Errorf("failed to parse mistral response: %w", err)
 	}
 
 	if len(grokResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices returned from grok")
+		return nil, fmt.Errorf("no choices returned from mistral")
 	}
 
 	text := grokResp.Choices[0].Message.Content
@@ -121,7 +121,7 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 
 	var enriched EnrichedCompany
 	if err := json.Unmarshal([]byte(text), &enriched); err != nil {
-		log.Printf("⚠️ Grok returned malformed response: %s", text[:min(200, len(text))])
+		log.Printf("⚠️ Mistral returned malformed response: %s", text[:min(200, len(text))])
 		return nil, fmt.Errorf("failed to parse enriched json: %w", err)
 	}
 
@@ -147,7 +147,7 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 			lead.Confidence = scoreByRole(lead.Role)
 		}
 		if lead.Source == "" {
-			lead.Source = "grok_ai"
+			lead.Source = "mistral_ai"
 		}
 		if lead.LinkedIn != "" && !isValidLinkedInURL(lead.LinkedIn) {
 			lead.LinkedIn = ""
@@ -209,7 +209,7 @@ Return ONLY this JSON, no markdown, no extra text:
       "email": null,
       "email_status": "not_found",
       "confidence": 95,
-      "source": "grok_ai"
+      "source": "mistral_ai"
     }
   ]
 }`,
