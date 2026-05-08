@@ -1,8 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { Users, Bookmark, Search, TrendingUp, Clock, Grid, BarChart3 } from "lucide-react";
+import { Users, Bookmark, Search, TrendingUp, Clock, Grid } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useHistoryStore } from "../store/historyStore";
+import { useLeadStore } from "../store/leadStore";
 import ExportDropdown from "../components/ExportDropdown";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
@@ -113,6 +114,161 @@ function formatDateRange(start: Date, end: Date): string {
   return `${startStr} - ${endStr}`;
 }
 
+type TrendBucket = {
+  label: string;
+  searches: number;
+  leadsFound: number;
+  leadsSaved: number;
+  saveRate: number;
+};
+
+function parseDateSafe(value?: string): Date | null {
+  if (!value) return null;
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) return direct;
+
+  const isValidYMD = (year: number, month: number, day: number) => {
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    const d = new Date(year, month - 1, day);
+    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  };
+
+  const parts = value.split(/[/-]/).map((p) => Number(p));
+  if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+    const [a, b, c] = parts;
+    // Handles common dd/mm/yyyy and mm/dd/yyyy formats strictly.
+    if (isValidYMD(c, b, a)) return new Date(c, b - 1, a);
+    if (isValidYMD(c, a, b)) return new Date(c, a - 1, b);
+  }
+
+  return null;
+}
+
+function buildBuckets(period: 'week' | 'month' | 'year'): TrendBucket[] {
+  const now = new Date();
+
+  if (period === 'week') {
+    const buckets: TrendBucket[] = [];
+    const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(now.getDate() - i);
+      buckets.push({
+        label: dayLabels[d.getDay()],
+        searches: 0,
+        leadsFound: 0,
+        leadsSaved: 0,
+        saveRate: 0,
+      });
+    }
+    return buckets;
+  }
+
+  if (period === 'month') {
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const weekCount = Math.ceil(daysInMonth / 7);
+    return Array.from({ length: weekCount }, (_, i) => ({
+      label: `W${i + 1}`,
+      searches: 0,
+      leadsFound: 0,
+      leadsSaved: 0,
+      saveRate: 0,
+    }));
+  }
+
+  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((label) => ({
+    label,
+    searches: 0,
+    leadsFound: 0,
+    leadsSaved: 0,
+    saveRate: 0,
+  }));
+}
+
+function MiniTrendChart({
+  title,
+  subtitle,
+  labels,
+  seriesA,
+  seriesB,
+  seriesAName,
+  seriesBName,
+  seriesAColor = "#3b82f6",
+  seriesBColor = "#f59e0b",
+}: {
+  title: string;
+  subtitle: string;
+  labels: string[];
+  seriesA: number[];
+  seriesB: number[];
+  seriesAName: string;
+  seriesBName: string;
+  seriesAColor?: string;
+  seriesBColor?: string;
+}) {
+  const width = 520;
+  const height = 220;
+  const pad = 24;
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  const safeA = seriesA.map((v) => Number.isFinite(v) ? v : 0);
+  const safeB = seriesB.map((v) => Number.isFinite(v) ? v : 0);
+  const maxVal = Math.max(1, ...safeA, ...safeB);
+
+  const toPoints = (arr: number[]) => arr.map((v, i) => {
+    const x = pad + (arr.length === 1 ? innerW / 2 : (i / (arr.length - 1)) * innerW);
+    const y = pad + innerH - (Math.max(0, v) / maxVal) * innerH;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <div className="card" style={{ marginBottom: 0 }}>
+      <div className="card-header">
+        <span className="card-title">{title}</span>
+        <span style={{ fontSize: 12, color: "var(--text2)" }}>{subtitle}</span>
+      </div>
+      <div className="card-body" style={{ paddingTop: 8 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: "var(--text1)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: seriesAColor }} /> {seriesAName}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--text1)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: seriesBColor }} /> {seriesBName}
+          </span>
+        </div>
+        <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 220, display: "block" }}>
+          <rect x={0} y={0} width={width} height={height} fill="transparent" />
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="var(--border)" />
+          <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="var(--border)" />
+          <polyline fill="none" stroke={seriesAColor} strokeWidth={2.5} points={toPoints(safeA)} />
+          <polyline fill="none" stroke={seriesBColor} strokeWidth={2.5} points={toPoints(safeB)} />
+          {safeA.map((v, i) => {
+            const x = pad + (safeA.length === 1 ? innerW / 2 : (i / (safeA.length - 1)) * innerW);
+            const y = pad + innerH - (Math.max(0, v) / maxVal) * innerH;
+            return <circle key={`a-${i}`} cx={x} cy={y} r={2.5} fill={seriesAColor} />;
+          })}
+          {safeB.map((v, i) => {
+            const x = pad + (safeB.length === 1 ? innerW / 2 : (i / (safeB.length - 1)) * innerW);
+            const y = pad + innerH - (Math.max(0, v) / maxVal) * innerH;
+            return <circle key={`b-${i}`} cx={x} cy={y} r={2.5} fill={seriesBColor} />;
+          })}
+          {labels.map((lbl, i) => {
+            const x = pad + (labels.length === 1 ? innerW / 2 : (i / (labels.length - 1)) * innerW);
+            return (
+              <text key={`l-${i}`} x={x} y={height - 6} textAnchor="middle" fontSize="11" fill="var(--text2)">
+                {lbl}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [performancePeriod, setPerformancePeriod] = useState<'week' | 'month' | 'year'>('week');
@@ -121,10 +277,15 @@ export default function Dashboard() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllCompanies, setShowAllCompanies] = useState(false);
   const { history, loadFromLocalStorage } = useHistoryStore();
+  const { leads: savedLeads, fetchSavedLeads } = useLeadStore();
 
   useEffect(() => {
     loadFromLocalStorage();
   }, [loadFromLocalStorage]);
+
+  useEffect(() => {
+    fetchSavedLeads();
+  }, [fetchSavedLeads]);
 
   const getDateRange = () => {
     if (performancePeriod === 'week') return getWeekRange();
@@ -159,6 +320,67 @@ export default function Dashboard() {
   const displayCompanies = showAllCompanies
     ? topCompanies.slice(companyStartIndex, companyEndIndex)
     : topCompanies.slice(0, companiesPerPage);
+
+  const searchesCount = history.length;
+  const leadsFoundCount = history.reduce((sum, item) => sum + item.leadsFound, 0);
+  const leadsSavedCount = savedLeads.length;
+  const saveRatePercent = leadsFoundCount > 0
+    ? ((leadsSavedCount / leadsFoundCount) * 100).toFixed(1)
+    : "0.0";
+
+  const trendBuckets = (() => {
+    const buckets = buildBuckets(performancePeriod);
+    const now = new Date();
+
+    history.forEach((item) => {
+      const d = parseDateSafe(item.date);
+      if (!d) return;
+      let idx = -1;
+      if (performancePeriod === "week") {
+        const diff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        if (diff >= 0 && diff <= 6) idx = 6 - diff;
+      } else if (performancePeriod === "month") {
+        if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+          idx = Math.floor((d.getDate() - 1) / 7);
+        }
+      } else if (d.getFullYear() === now.getFullYear()) {
+        idx = d.getMonth();
+      }
+
+      if (idx >= 0 && idx < buckets.length) {
+        buckets[idx].searches += 1;
+        buckets[idx].leadsFound += Number.isFinite(item.leadsFound) ? item.leadsFound : 0;
+      }
+    });
+
+    savedLeads.forEach((lead) => {
+      const d = parseDateSafe(lead.createdAt);
+      if (!d) return;
+      let idx = -1;
+      if (performancePeriod === "week") {
+        const diff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+        if (diff >= 0 && diff <= 6) idx = 6 - diff;
+      } else if (performancePeriod === "month") {
+        if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+          idx = Math.floor((d.getDate() - 1) / 7);
+        }
+      } else if (d.getFullYear() === now.getFullYear()) {
+        idx = d.getMonth();
+      }
+
+      if (idx >= 0 && idx < buckets.length) {
+        buckets[idx].leadsSaved += 1;
+      }
+    });
+
+    buckets.forEach((bucket) => {
+      bucket.saveRate = bucket.leadsFound > 0
+        ? Number(((bucket.leadsSaved / bucket.leadsFound) * 100).toFixed(1))
+        : 0;
+    });
+
+    return buckets;
+  })();
 
   useEffect(() => {
     setHistoryPage(1);
@@ -537,13 +759,33 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="card-body">
-          <div className="chart-placeholder">
-            <BarChart3 size={28} />
-            <div style={{ marginTop: 12, textAlign: 'center' }}>
-              <div style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-                {formatDateRange(getDateRange().start, getDateRange().end)}
-              </div>
-              <span>Start searching for leads to see performance metrics</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 13, color: "var(--text2)" }}>
+              {formatDateRange(getDateRange().start, getDateRange().end)}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <MiniTrendChart
+                title="Searches vs Leads Found"
+                subtitle={`Total ${searchesCount} searches · ${leadsFoundCount} leads found`}
+                labels={trendBuckets.map((b) => b.label)}
+                seriesA={trendBuckets.map((b) => b.searches)}
+                seriesB={trendBuckets.map((b) => b.leadsFound)}
+                seriesAName="Searches Count"
+                seriesBName="Leads Found"
+                seriesAColor="#3b82f6"
+                seriesBColor="#f59e0b"
+              />
+              <MiniTrendChart
+                title="Leads Saved vs Save Rate"
+                subtitle={`Total ${leadsSavedCount} leads saved · ${saveRatePercent}% save rate`}
+                labels={trendBuckets.map((b) => b.label)}
+                seriesA={trendBuckets.map((b) => b.leadsSaved)}
+                seriesB={trendBuckets.map((b) => b.saveRate)}
+                seriesAName="Leads Saved"
+                seriesBName="Save Rate %"
+                seriesAColor="#10b981"
+                seriesBColor="#ef4444"
+              />
             </div>
           </div>
         </div>

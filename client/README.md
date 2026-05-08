@@ -1,73 +1,103 @@
-# React + TypeScript + Vite
+# Lead Finder Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite frontend for the Lead/CEO Finder platform.
 
-Currently, two official plugins are available:
+This app helps users search company domains, review discovered decision-makers, save high-value leads, and monitor activity from a single dashboard.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What This Frontend Includes
 
-## React Compiler
+- Authentication flow (`/login`, `/signup`) with persisted auth state
+- Protected app routes with auto-redirect on unauthorized API responses
+- Domain-based lead search and results review
+- Save/unsave/delete lead management
+- Dashboard insights:
+  - Recent Activity
+  - Top Companies
+  - Performance Overview (`Searches Count`, `Leads Found`, `Leads Saved`, `Save Rate`)
+- Export dropdown support (PDF, Excel, Word) in key data views
+- Dark/Light mode support
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- React 19
+- TypeScript
+- Vite
+- Zustand (state management)
+- React Router
+- Axios
+- Lucide Icons
+- Export libraries: `xlsx`, `jspdf`, `jspdf-autotable`, `docx`
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Project Structure (High Level)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+client/
+├─ src/
+│  ├─ pages/          # Dashboard, Search, Results, Saved Leads, Auth pages
+│  ├─ components/     # Reusable UI components
+│  ├─ routes/         # Route config and protected routing
+│  ├─ store/          # Zustand stores (auth, leads, history)
+│  ├─ services/       # API calls
+│  ├─ styles/         # Theme and layout styles
+│  └─ utils/          # Export and shared utility helpers
+├─ .env               # Frontend environment variables
+└─ package.json
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Prerequisites
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Node.js 18+ (recommended 20+)
+- npm
+- Running backend API (see `../server/README.md`)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Environment Variables
+
+Create or update `client/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
 ```
+
+## Getting Started
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+App runs at `http://localhost:5173` by default.
+
+## Available Scripts
+
+- `npm run dev` - Start Vite dev server
+- `npm run build` - Type-check and build production bundle
+- `npm run preview` - Preview built app locally
+- `npm run lint` - Run ESLint
+
+## API Expectations
+
+The frontend expects the backend to provide these authenticated routes:
+
+- `POST /auth/signup`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/user`
+- `POST /search`
+- `GET /leads`
+- `POST /leads/save`
+- `DELETE /leads`
+- `GET /history`
+- `GET /export` or `GET /export/csv`
+
+## Notes for Contributors
+
+- Keep components theme-aware by using existing CSS variables (`--text1`, `--surface2`, etc.)
+- Reuse shared utilities (`ExportDropdown`, `exportUtils`) before adding duplicate export logic
+- Use store actions instead of direct localStorage or fetch logic in page components whenever possible
+
+## Troubleshooting
+
+- **401 loop / unexpected logout**: verify token is set and backend auth endpoints are reachable.
+- **No data in dashboard cards**: confirm backend is running and user has search/saved history.
+- **CORS errors**: ensure backend `CLIENT_URL` includes your frontend origin.
