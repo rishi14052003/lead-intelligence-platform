@@ -440,7 +440,7 @@ export default function Login() {
 
               {/* Forgot Password */}
               <div className="lf-forgot">
-                <button type="button" className="lf-forgot-link">
+                <button type="button" className="lf-forgot-link" onClick={() => navigate("/forgot-password")}>
                   Forgot password?
                 </button>
               </div>

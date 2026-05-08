@@ -5,6 +5,9 @@ import SavedLeads from '../pages/SavedLeads';
 import Login from '../pages/Login';
 import Signup from '../pages/Signup';
 import ProfileSettings from '../pages/ProfileSettings';
+import ForgotPassword from '../pages/ForgotPassword';
+import VerifyOtp from '../pages/VerifyOtp';
+import ResetPassword from '../pages/ResetPassword';
 
 // Public routes (no authentication required)
 export const publicRoutes = [
@@ -15,6 +18,18 @@ export const publicRoutes = [
   {
     path: '/signup',
     element: Signup,
+  },
+  {
+    path: '/forgot-password',
+    element: ForgotPassword,
+  },
+  {
+    path: '/verify-otp',
+    element: VerifyOtp,
+  },
+  {
+    path: '/reset-password',
+    element: ResetPassword,
   },
 ];
 

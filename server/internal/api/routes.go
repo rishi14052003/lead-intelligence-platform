@@ -26,6 +26,9 @@ func Routes() *chi.Mux {
 	r.Post("/auth/signup", SignupHandler)
 	r.Post("/auth/login", LoginHandler)
 	r.Post("/auth/logout", LogoutHandler)
+	r.Post("/auth/forgot-password", ForgotPasswordHandler)
+	r.Post("/auth/verify-otp", VerifyOTPHandler)
+	r.Post("/auth/reset-password", ResetPasswordHandler)
 
 	// Protected routes
 	r.Group(func(r chi.Router) {

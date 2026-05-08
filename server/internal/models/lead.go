@@ -28,11 +28,14 @@ type Lead struct {
 }
 
 type User struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Email     string             `bson:"email" json:"email"`
-	Password  string             `bson:"password" json:"-"`
-	FirstName string             `bson:"firstName" json:"firstName"`
-	LastName  string             `bson:"lastName" json:"lastName"`
-	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Email          string             `bson:"email" json:"email"`
+	Password       string             `bson:"password" json:"-"`
+	FirstName      string             `bson:"firstName" json:"firstName"`
+	LastName       string             `bson:"lastName" json:"lastName"`
+	ResetOtp       string             `bson:"resetOtp,omitempty" json:"-"`
+	ResetOtpExpiry time.Time          `bson:"resetOtpExpiry,omitempty" json:"-"`
+	OtpVerified    bool               `bson:"otpVerified,omitempty" json:"-"`
+	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt      time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
