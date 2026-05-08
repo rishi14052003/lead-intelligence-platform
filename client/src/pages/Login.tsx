@@ -67,9 +67,11 @@ export default function Login() {
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message || "Login failed. Please try again.";
-      if (errorMessage.includes("Email")) {
+      const normalizedError = String(errorMessage).toLowerCase();
+
+      if (normalizedError.includes("wrong email")) {
         setErrors((prev) => ({ ...prev, email: errorMessage, general: "" }));
-      } else if (errorMessage.includes("Password")) {
+      } else if (normalizedError.includes("wrong password")) {
         setErrors((prev) => ({ ...prev, password: errorMessage, general: "" }));
       } else {
         setErrors((prev) => ({ ...prev, general: errorMessage }));

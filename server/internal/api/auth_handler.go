@@ -146,8 +146,21 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	err := usersCollection.FindOne(r.Context(), bson.M{"email": req.Email}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			// If there are no users at all, surface "user not found";
+			// otherwise this specific email is wrong.
+			userCount, countErr := usersCollection.CountDocuments(r.Context(), bson.M{})
+			if countErr != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"message": "Database error"})
+				return
+			}
+
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Wrong Email Entered"})
+			if userCount == 0 {
+				json.NewEncoder(w).Encode(map[string]string{"message": "user not found"})
+			} else {
+				json.NewEncoder(w).Encode(map[string]string{"message": "wrong email entered"})
+			}
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"message": "Database error"})
@@ -158,7 +171,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Verify password
 	if !utils.VerifyPassword(user.Password, req.Password) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Wrong Password Entered"})
+		json.NewEncoder(w).Encode(map[string]string{"message": "wrong password entered"})
 		return
 	}
 
