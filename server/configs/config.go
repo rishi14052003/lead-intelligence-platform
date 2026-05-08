@@ -7,27 +7,26 @@ import (
 )
 
 type Config struct {
-	MongoURI     string
-	DBName       string
-	ServerPort   string
-	Environment  string
-	ClientURL    string
-	GeminiAPIKey string
+	MongoURI    string
+	DBName      string
+	ServerPort  string
+	Environment string
+	ClientURL   string
+	GrokAPIKey  string
 }
 
 var appConfig *Config
 
 func LoadConfig() *Config {
-	// Load .env file if it exists
 	_ = godotenv.Load()
 
 	appConfig = &Config{
-		MongoURI:     getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		DBName:       getEnv("DB_NAME", "leadfinder"),
-		ServerPort:   getEnv("SERVER_PORT", "8080"),
-		Environment:  getEnv("ENVIRONMENT", "development"),
-		ClientURL:    getEnv("CLIENT_URL", "http://localhost:5173"),
-		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
+		MongoURI:    getEnv("MONGO_URI", "mongodb://localhost:27017"),
+		DBName:      getEnv("DB_NAME", "leadfinder"),
+		ServerPort:  getEnv("SERVER_PORT", "8080"),
+		Environment: getEnv("ENVIRONMENT", "development"),
+		ClientURL:   getEnv("CLIENT_URL", "http://localhost:5173"),
+		GrokAPIKey:  getEnv("GROK_API_KEY", ""),
 	}
 
 	return appConfig

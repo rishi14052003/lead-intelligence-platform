@@ -26,15 +26,15 @@ type LeadService struct {
 	linkedinParser *scraper.LinkedInParser
 	scoringService *ScoringService
 	emailService   *EmailService
-	geminiService  *GeminiService
+	grokService    *GrokService
 }
 
 // NewLeadService creates a new lead service
 func NewLeadService(db *database.Database) *LeadService {
 	config := configs.GetConfig()
-	var geminiService *GeminiService
-	if config != nil && config.GeminiAPIKey != "" {
-		geminiService = NewGeminiService(config.GeminiAPIKey)
+	var grokService *GrokService
+	if config != nil && config.GrokAPIKey != "" {
+		grokService = NewGrokService(config.GrokAPIKey)
 	}
 
 	return &LeadService{
@@ -44,7 +44,7 @@ func NewLeadService(db *database.Database) *LeadService {
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
-		geminiService:  geminiService,
+		grokService:    grokService,
 	}
 }
 
@@ -63,7 +63,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	log.Printf("🔎 Starting AI lead search for: %s", companyName)
 
-	// Create search record
 	search := &models.Search{
 		UserID:    userID,
 		Query:     query,
@@ -87,7 +86,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		log.Printf("⚠️ Could not find official website for: %s", companyName)
 	}
 
-	// Step 2: Concurrent scraping — LinkedIn + Website
+	// Step 2: Concurrent scraping
 	type linkedinResult struct {
 		profiles []map[string]string
 	}
@@ -98,7 +97,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 	linkedinChan := make(chan linkedinResult, 1)
 	websiteChan := make(chan websiteResult, 1)
 
-	// Goroutine 1: LinkedIn profile scraping via Google
 	go func() {
 		var allProfiles []map[string]string
 		roles := []string{"CEO", "CTO", "Founder", "HR"}
@@ -117,7 +115,6 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		linkedinChan <- linkedinResult{profiles: allProfiles}
 	}()
 
-	// Goroutine 2: Website scraping
 	go func() {
 		if website == "" {
 			websiteChan <- websiteResult{result: &scraper.WebsiteScrapeResult{Pages: make(map[string]string)}}
@@ -134,20 +131,19 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		websiteChan <- websiteResult{result: result}
 	}()
 
-	// Collect results
 	liRes := <-linkedinChan
 	webRes := <-websiteChan
 
 	log.Printf("📊 Raw data: %d LinkedIn profiles, %d website pages", len(liRes.profiles), len(webRes.result.Pages))
 
-	// Step 3: Build data for Gemini
+	// Step 3: Build data for Grok
 	var websiteText string
-	var websiteDataForGemini []map[string]string
+	var websiteDataForGrok []map[string]string
 	if webRes.result != nil {
 		for pageURL, text := range webRes.result.Pages {
 			websiteText += text + "\n"
 			if len(webRes.result.Emails) > 0 || len(webRes.result.Names) > 0 {
-				websiteDataForGemini = append(websiteDataForGemini, map[string]string{
+				websiteDataForGrok = append(websiteDataForGrok, map[string]string{
 					"page":         pageURL,
 					"emails_found": strings.Join(webRes.result.Emails, ", "),
 					"names_found":  strings.Join(webRes.result.Names[:minInt(len(webRes.result.Names), 10)], ", "),
@@ -156,26 +152,24 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		}
 	}
 
-	// Step 4: Gemini AI Enrichment
-	// Gemini uses scraped data OR falls back to its own knowledge about the company
+	// Step 4: Grok AI Enrichment
 	var enriched *EnrichedCompany
-	if ls.geminiService != nil {
-		log.Println("🤖 Sending data to Gemini AI for enrichment...")
-		var gemErr error
-		enriched, gemErr = ls.geminiService.EnrichLeads(companyName, website, liRes.profiles, websiteDataForGemini, websiteText)
-		if gemErr != nil {
-			log.Printf("⚠️ Gemini enrichment failed: %v", gemErr)
+	if ls.grokService != nil {
+		log.Println("🤖 Sending data to Grok AI for enrichment...")
+		var grokErr error
+		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, liRes.profiles, websiteDataForGrok, websiteText)
+		if grokErr != nil {
+			log.Printf("⚠️ Grok enrichment failed: %v", grokErr)
 		} else {
-			log.Printf("✓ Gemini returned %d enriched leads", len(enriched.Leads))
+			log.Printf("✓ Grok returned %d enriched leads", len(enriched.Leads))
 		}
 	} else {
-		log.Println("⚠️ Gemini service not configured (GEMINI_API_KEY missing)")
+		log.Println("⚠️ Grok service not configured (GROK_API_KEY missing)")
 	}
 
-	// Step 5: Build final leads map (Gemini results take priority)
+	// Step 5: Build final leads map
 	leadsMap := make(map[string]*models.Lead)
 
-	// Add Gemini-enriched leads first
 	if enriched != nil {
 		for _, l := range enriched.Leads {
 			if l.Name == "" {
@@ -202,7 +196,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		}
 	}
 
-	// Step 6: Fallback — add raw LinkedIn profiles not already covered by Gemini
+	// Step 6: Fallback — raw LinkedIn profiles
 	for _, p := range liRes.profiles {
 		name := p["name"]
 		role := p["role"]
@@ -230,7 +224,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		}
 	}
 
-	// Step 7: Assign REAL scraped emails to leads (only if email matches name — no guessing)
+	// Step 7: Assign scraped emails
 	if webRes.result != nil && len(webRes.result.Emails) > 0 {
 		for _, email := range webRes.result.Emails {
 			if utils.IsBlockedEmail(email) {
@@ -251,26 +245,18 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	// Step 8: Finalise leads list
 	var leads []models.Lead
-
 	for _, lead := range leadsMap {
-
-		log.Printf("📌 CHECKING LEAD: %+v", lead)
-
-		// Clean LinkedIn junk
 		lead.Name = strings.ReplaceAll(lead.Name, "| LinkedIn", "")
 		lead.Name = strings.ReplaceAll(lead.Name, "- LinkedIn", "")
 		lead.Name = strings.TrimSpace(lead.Name)
 
-		// Validate name
 		if !utils.ValidateName(lead.Name) {
 			log.Printf("❌ INVALID LEAD NAME: %s", lead.Name)
 			continue
 		}
 
 		lead.UserID = userID
-
 		log.Printf("✅ FINAL LEAD ADDED: %s | %s", lead.Name, lead.Role)
-
 		leads = append(leads, *lead)
 	}
 
@@ -336,11 +322,10 @@ func (ls *LeadService) GetSearchHistory(ctx context.Context, userID primitive.Ob
 	return searches, nil
 }
 
-// SaveLead saves a lead to MongoDB — fixed deduplication (uses name+company, not email)
+// SaveLead saves a lead to MongoDB
 func (ls *LeadService) SaveLead(ctx context.Context, lead *models.Lead) error {
 	collection := ls.db.Instance.Collection("leads")
 
-	// Deduplicate by name + company (not email, since most leads have no email)
 	filter := bson.M{
 		"name":    bson.M{"$regex": "^" + lead.Name + "$", "$options": "i"},
 		"company": bson.M{"$regex": "^" + lead.Company + "$", "$options": "i"},
@@ -349,7 +334,6 @@ func (ls *LeadService) SaveLead(ctx context.Context, lead *models.Lead) error {
 	var existing models.Lead
 	err := collection.FindOne(ctx, filter).Decode(&existing)
 	if err == nil {
-		// Lead exists — update it
 		lead.ID = existing.ID
 		lead.CreatedAt = existing.CreatedAt
 		lead.UpdatedAt = time.Now()
@@ -358,11 +342,9 @@ func (ls *LeadService) SaveLead(ctx context.Context, lead *models.Lead) error {
 	}
 
 	if err != mongo.ErrNoDocuments {
-		// Unexpected error
 		return err
 	}
 
-	// New lead — insert
 	if lead.ID.IsZero() {
 		lead.ID = primitive.NewObjectID()
 	}
@@ -378,8 +360,6 @@ func (ls *LeadService) DeleteAllLeads(ctx context.Context) error {
 	_, err := collection.DeleteMany(ctx, bson.M{})
 	return err
 }
-
-// --- Private helpers ---
 
 func (ls *LeadService) saveSearch(ctx context.Context, search *models.Search) (interface{}, error) {
 	collection := ls.db.Instance.Collection("searches")
@@ -403,7 +383,6 @@ func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{},
 	collection.UpdateByID(ctx, searchID, update)
 }
 
-// matchEmailToName checks if an email likely belongs to a person based on name
 func matchEmailToName(email, name string) bool {
 	if email == "" || name == "" {
 		return false
@@ -421,7 +400,6 @@ func matchEmailToName(email, name string) bool {
 			matchCount++
 		}
 	}
-	// Require at least 2 name parts to match (first + last) to avoid false positives
 	return matchCount >= 2
 }
 
@@ -432,7 +410,6 @@ func minInt(a, b int) int {
 	return b
 }
 
-// ValidationError is a custom error for validation failures
 type ValidationError struct {
 	Message string
 }
