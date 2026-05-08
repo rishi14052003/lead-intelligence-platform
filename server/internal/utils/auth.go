@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"lead-finder/configs"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -36,9 +37,16 @@ func VerifyPassword(hashedPassword, password string) bool {
 
 // GenerateJWT generates a JWT token for a user using HMAC
 func GenerateJWT(userID, email, firstName string) (string, error) {
-	jwtSecret := os.Getenv("JWT_SECRET")
+	config := configs.GetConfig()
+	jwtSecret := config.JWTSecret
+	
+	// Fallback to env var if config is nil (shouldn't happen, but safety first)
 	if jwtSecret == "" {
-		jwtSecret = generateRandomSecret()
+		jwtSecret = os.Getenv("JWT_SECRET")
+	}
+	
+	if jwtSecret == "" {
+		return "", fmt.Errorf("JWT_SECRET not configured")
 	}
 
 	header := map[string]interface{}{
@@ -74,9 +82,16 @@ func GenerateJWT(userID, email, firstName string) (string, error) {
 
 // VerifyJWT verifies and parses a JWT token
 func VerifyJWT(tokenString string) (map[string]interface{}, error) {
-	jwtSecret := os.Getenv("JWT_SECRET")
+	config := configs.GetConfig()
+	jwtSecret := config.JWTSecret
+	
+	// Fallback to env var if config is nil (shouldn't happen, but safety first)
 	if jwtSecret == "" {
-		jwtSecret = generateRandomSecret()
+		jwtSecret = os.Getenv("JWT_SECRET")
+	}
+	
+	if jwtSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET not configured")
 	}
 
 	parts := strings.Split(tokenString, ".")

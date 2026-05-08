@@ -59,11 +59,12 @@ export const useLeadStore = create<State>((set) => ({
     }
   },
 
-  search: async (query: string) => {
+  search: async (query: string, location?: string) => {
 
     console.log("🚀 STORE SEARCH STARTED");
 
     console.log("📌 QUERY:", query);
+    console.log("📍 LOCATION:", location || "Not specified");
 
     set({
       loading: true,
@@ -75,18 +76,18 @@ export const useLeadStore = create<State>((set) => ({
 
       console.log("📡 CALLING searchLeads()");
 
-      const leads = await searchLeads(query);
+      const leads = await searchLeads(query, location);
 
       console.log("✅ RECEIVED LEADS:", leads);
 
       console.log("📊 LEADS COUNT:", leads?.length || 0);
 
-      // Save search results to localStorage
-      saveSearchResultsToStorage(query, leads);
+      // Save search results to localStorage with location
+      saveSearchResultsToStorage(query, leads, location);
 
       set({
         leads,
-        searchQuery: query,
+        searchQuery: location ? `${query}, ${location}` : query,
         loading: false,
       });
 

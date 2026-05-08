@@ -5,17 +5,19 @@ const SEARCH_QUERY_KEY = "searchQuery";
 
 export interface StoredSearchResults {
   query: string;
+  location?: string;
   results: Lead[];
   timestamp: number;
 }
 
 /**
- * Save search results to localStorage with query
+ * Save search results to localStorage with query and location
  */
-export function saveSearchResultsToStorage(query: string, results: Lead[]): void {
+export function saveSearchResultsToStorage(query: string, results: Lead[], location?: string): void {
   try {
     const data: StoredSearchResults = {
       query,
+      ...(location && { location }),
       results,
       timestamp: Date.now(),
     };

@@ -43,8 +43,8 @@ const HOW_IT_WORKS = [
   },
   {
     step: "02",
-    title: "AI Scrapes",
-    desc: "We scan websites, LinkedIn, and public data.",
+    title: "Add Location",
+    desc: "Optionally enter state and country for precise targeting.",
   },
   {
     step: "03",
@@ -54,32 +54,40 @@ const HOW_IT_WORKS = [
 ];
 
 export default function SearchPage() {
-  const [query, setQuery] = useState("");
+  const [company, setCompany] = useState("");
+  const [location, setLocation] = useState("");
   const [error, setError] = useState("");
-  const [focused, setFocused] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [focused, setFocused] = useState<"company" | "location" | null>(null);
+  const companyInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { search, loading } = useLeadStore();
   const { addHistory } = useHistoryStore();
 
   useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 600);
+    const timer = setTimeout(() => companyInputRef.current?.focus(), 600);
     return () => clearTimeout(timer);
   }, []);
 
   const onSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = query.trim();
-    if (!trimmed) {
+    const trimmedCompany = company.trim();
+    const trimmedLocation = location.trim();
+    
+    if (!trimmedCompany) {
       setError("Enter a company name to get started.");
       return;
     }
+    
     setError("");
     try {
-      const searchResults = await search(trimmed);
+      const searchResults = await search(trimmedCompany, trimmedLocation);
+      const displayQuery = trimmedLocation 
+        ? `${trimmedCompany}, ${trimmedLocation}`
+        : trimmedCompany;
+      
       addHistory({
         id: Date.now().toString(),
-        domain: trimmed,
+        domain: displayQuery,
         date: new Date().toLocaleDateString(),
         leadsFound: searchResults.length,
       });
@@ -91,7 +99,7 @@ export default function SearchPage() {
 
   return (
     <>
-      {loading && <SearchProgress companyName={query} />}
+      {loading && <SearchProgress companyName={location ? `${company}, ${location}` : company} />}
 
       <div className="search-page-v2 mounted">
         <div className="search-orb search-orb-1" />
@@ -108,7 +116,7 @@ export default function SearchPage() {
           </h1>
 
           <p className="search-subline" style={{ fontSize: 17, maxWidth: 600 }}>
-            Enter any company name and surface CEOs, CTOs, and key executives —
+            Enter a company name and optionally add location to find CEOs, CTOs, and key executives —
             complete with emails, LinkedIn profiles, and AI relevance scores.
           </p>
 
@@ -126,34 +134,109 @@ export default function SearchPage() {
               onSubmit={onSearch}
               style={{ outline: "none", boxShadow: "none" }}
             >
+              {/* Company Name Input */}
               <div
-                className="search-field-wrap"
-                style={{ padding: "8px 8px 8px 18px" }}
+                style={{
+                  padding: "16px",
+                  borderBottom: "1px solid var(--border, #e5e7eb)",
+                }}
               >
-                <div className="search-field-icon">
-                  <SearchIcon size={19} />
-                </div>
-                <input
-                  ref={inputRef}
-                  className="search-field-input"
-                  placeholder="e.g. Stripe, OpenAI, Notion…"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setError("");
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--text2, #6b7280)",
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
                   }}
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                  disabled={loading}
-                  autoComplete="off"
-                  spellCheck={false}
-                  style={{ fontSize: 16, padding: "10px 0" }}
-                />
+                >
+                  Company Name
+                </label>
+                <div
+                  className="search-field-wrap"
+                  style={{ padding: 0, position: "relative" }}
+                >
+                  <div className="search-field-icon">
+                    <SearchIcon size={19} />
+                  </div>
+                  <input
+                    ref={companyInputRef}
+                    className="search-field-input"
+                    placeholder="Enter company name or domain"
+                    value={company}
+                    onChange={(e) => {
+                      setCompany(e.target.value);
+                      setError("");
+                    }}
+                    onFocus={() => setFocused("company")}
+                    onBlur={() => setFocused(null)}
+                    disabled={loading}
+                    autoComplete="off"
+                    spellCheck={false}
+                    style={{ fontSize: 16, padding: "10px 0" }}
+                  />
+                </div>
+              </div>
+
+              {/* Location Input */}
+              <div style={{ padding: "16px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--text2, #6b7280)",
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  Location <span style={{ fontWeight: 400, color: "var(--text3, #9ca3af)" }}>(Optional)</span>
+                </label>
+                <div
+                  className="search-field-wrap"
+                  style={{ padding: 0, position: "relative" }}
+                >
+                  <div className="search-field-icon">
+                    <Globe size={19} />
+                  </div>
+                  <input
+                    className="search-field-input"
+                    placeholder="Enter city, state, country for accurate data"
+                    value={location}
+                    onChange={(e) => {
+                      setLocation(e.target.value);
+                      setError("");
+                    }}
+                    onFocus={() => setFocused("location")}
+                    onBlur={() => setFocused(null)}
+                    disabled={loading}
+                    autoComplete="off"
+                    spellCheck={false}
+                    style={{ fontSize: 16, padding: "10px 0" }}
+                  />
+                </div>
+              </div>
+
+              {/* Search Button */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: "8px 16px 16px",
+                }}
+              >
                 <button
                   type="submit"
                   className="search-field-btn"
-                  disabled={loading || !query.trim()}
-                  style={{ padding: "12px 26px", fontSize: 15 }}
+                  disabled={loading || !company.trim()}
+                  style={{ 
+                    padding: "12px 26px", 
+                    fontSize: 15,
+                    flex: 1,
+                  }}
                 >
                   {loading ? (
                     <span className="search-field-spinner" />
@@ -166,7 +249,7 @@ export default function SearchPage() {
                 </button>
               </div>
               {error && (
-                <div className="search-error-msg">
+                <div className="search-error-msg" style={{ margin: "0 16px 16px" }}>
                   <span className="search-error-dot" />
                   {error}
                 </div>

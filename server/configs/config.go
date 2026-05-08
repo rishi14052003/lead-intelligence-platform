@@ -13,6 +13,7 @@ type Config struct {
 	Environment string
 	ClientURL   string
 	GrokAPIKey  string
+	JWTSecret   string
 }
 
 var appConfig *Config
@@ -27,6 +28,7 @@ func LoadConfig() *Config {
 		Environment: getEnv("ENVIRONMENT", "development"),
 		ClientURL:   getEnv("CLIENT_URL", "http://localhost:5173"),
 		GrokAPIKey:  getEnv("GROK_API_KEY", ""),
+		JWTSecret:   getEnv("JWT_SECRET", "uigre7grdfg7f98dg798re_gdsg897g89"),
 	}
 
 	return appConfig

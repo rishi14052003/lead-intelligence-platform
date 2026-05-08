@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { saveLeads } from "../services/leadService";
 import { deleteLead } from "../services/leadService";
-import { getSavedLeadIds } from "../services/leadService";
+import { getSavedLeads } from "../services/leadService";
 import Dialog from "../components/Dialog";
 import ExportDropdown from "../components/ExportDropdown";
 import SearchProgress from "../components/feedback/SearchProgress";
@@ -75,7 +75,8 @@ export default function Results() {
   const [filter, setFilter] = useState("All");
   const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
-  const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(new Set());
+  const [savedLeadSignatures, setSavedLeadSignatures] = useState<Set<string>>(new Set());
+  const [savedLeadIdMap, setSavedLeadIdMap] = useState<Map<string, string>>(new Map());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -90,27 +91,33 @@ export default function Results() {
   const clearLeads = useLeadStore((s) => s.clearLeads);
   const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
   
-  // Restore search results from localStorage on mount
+  // Always restore search results from localStorage on mount
   useEffect(() => {
-    if (leads.length === 0) {
-      console.log("📋 No leads in store, attempting to restore from localStorage");
-      restoreSearchResults();
-    }
+    console.log("📋 Restoring search results from localStorage");
+    restoreSearchResults();
   }, []);
   
-  // Load saved lead IDs on mount to check which are already saved
+  // Load saved lead signatures on mount to check which are already saved
   useEffect(() => {
-    const loadSavedIds = async () => {
-      const ids = await getSavedLeadIds();
-      setSavedLeadIds(new Set(ids));
-    };
-    loadSavedIds();
+    refreshSavedSignatures();
   }, []);
 
-  // Refresh saved lead IDs after save/unsave
-  const refreshSavedIds = async () => {
-    const ids = await getSavedLeadIds();
-    setSavedLeadIds(new Set(ids));
+  // Refresh saved lead signatures after save/unsave
+  const refreshSavedSignatures = async () => {
+    try {
+      const savedLeads = await getSavedLeads();
+      const signatures = new Set<string>();
+      const idMap = new Map<string, string>();
+      savedLeads.forEach((l) => {
+        const sig = getLeadSignature(l);
+        signatures.add(sig);
+        if (l.id) idMap.set(sig, l.id);
+      });
+      setSavedLeadSignatures(signatures);
+      setSavedLeadIdMap(idMap);
+    } catch (error) {
+      console.error("Error refreshing saved signatures:", error);
+    }
   };
 
   // Reset to page 1 when filter or leads change
@@ -121,12 +128,22 @@ export default function Results() {
   const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
   const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
 
-  const getLeadId = (lead: { id?: string }) =>
-    lead.id && lead.id !== "000000000000000000000000" ? lead.id : null;
+  const getLeadSignature = (lead: any): string => {
+    return [
+      (lead.name || "").toLowerCase().trim(),
+      (lead.role || "").toLowerCase().trim(),
+      (lead.company || "").toLowerCase().trim(),
+      (lead.companyUrl || "").toLowerCase().trim(),
+      (lead.email || "").toLowerCase().trim(),
+    ].join("|");
+  };
 
-  const isLeadSaved = (lead: { id?: string }) => {
-    const id = getLeadId(lead);
-    return id ? savedLeadIds.has(id) : false;
+  const isLeadSaved = (lead: any) => {
+    return savedLeadSignatures.has(getLeadSignature(lead));
+  };
+
+  const getSavedLeadDbId = (lead: any): string | null => {
+    return savedLeadIdMap.get(getLeadSignature(lead)) || null;
   };
 
   // Calculate pagination
@@ -150,8 +167,8 @@ export default function Results() {
     setSaving(true);
     try {
       await saveLeads(filtered);
-      // Refresh saved lead IDs to update bookmark icons
-      await refreshSavedIds();
+      // Refresh saved lead signatures to update bookmark icons
+      await refreshSavedSignatures();
       // No dialog shown for save - just save silently
     } catch (error) {
       setDialogConfig({
@@ -169,25 +186,25 @@ export default function Results() {
   const handleSaveSingle = async (lead: any) => {
     // Check if lead is already saved
     const isSaved = isLeadSaved(lead);
-    const leadId = getLeadId(lead);
-    
+    const dbId = getSavedLeadDbId(lead);
+
     if (isSaved) {
-      // Unsave the lead
+      // Delete the saved lead
       setDialogConfig({
-        title: "Unsave Lead",
-        message: `Are you sure you want to unsave this lead?`,
+        title: "Delete Saved Lead",
+        message: `Are you sure you want to delete this saved lead?`,
         onConfirm: async () => {
           try {
-            if (!leadId) {
-              throw new Error("Missing lead id for unsave");
+            if (!dbId) {
+              throw new Error("Missing lead id for delete");
             }
-            await deleteLead(leadId);
-            await refreshSavedIds();
+            await deleteLead(dbId);
+            await refreshSavedSignatures();
             setDialogOpen(false);
           } catch (error) {
             setDialogConfig({
               title: "Error",
-              message: "Failed to unsave lead",
+              message: "Failed to delete saved lead",
               onConfirm: () => setDialogOpen(false),
               variant: "danger",
             });
@@ -201,7 +218,7 @@ export default function Results() {
       // Save the lead
       try {
         await saveLeads([lead]);
-        await refreshSavedIds();
+        await refreshSavedSignatures();
       } catch (error) {
         setDialogConfig({
           title: "Error",

@@ -63,13 +63,13 @@ func NewGrokService(apiKey string) *GrokService {
 	}
 }
 
-func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, websiteData []map[string]string, websiteText string) (*EnrichedCompany, error) {
+func (gs *GrokService) EnrichLeads(companyName, website, location string, linkedinData, websiteData []map[string]string, websiteText string) (*EnrichedCompany, error) {
 	if gs.apiKey == "" {
 		return nil, fmt.Errorf("mistral api key not configured")
 	}
 
 	hasScrapedData := len(linkedinData) > 0 || len(websiteData) > 0 || len(websiteText) > 100
-	prompt := buildGrokPrompt(companyName, website, linkedinData, websiteData, websiteText, hasScrapedData)
+	prompt := buildGrokPrompt(companyName, website, location, linkedinData, websiteData, websiteText, hasScrapedData)
 
 	reqBody := GrokRequest{
 		Model: "mistral-small-latest",
@@ -165,7 +165,7 @@ func (gs *GrokService) EnrichLeads(companyName, website string, linkedinData, we
 	return &enriched, nil
 }
 
-func buildGrokPrompt(companyName, website string, linkedinData, websiteData []map[string]string, websiteText string, hasScrapedData bool) string {
+func buildGrokPrompt(companyName, website, location string, linkedinData, websiteData []map[string]string, websiteText string, hasScrapedData bool) string {
 	scrapedSection := ""
 	if hasScrapedData {
 		scrapedSection = fmt.Sprintf(`
@@ -182,10 +182,15 @@ Website text:
 		scrapedSection = "No scraped data available. Use your own knowledge about this company."
 	}
 
+	locationContext := ""
+	if location != "" {
+		locationContext = fmt.Sprintf("Company Location: %s.\nFilter and prioritize executives working in this location or for offices in this region.\n", location)
+	}
+
 	return fmt.Sprintf(`You are a B2B lead intelligence analyst.
 
 Identify real executives at "%s" (website: %s).
-
+%s
 RULES:
 1. Only real people with real full names. No placeholders.
 2. Never guess emails. Set email to null if unknown.
@@ -213,7 +218,7 @@ Return ONLY this JSON, no markdown, no extra text:
     }
   ]
 }`,
-		companyName, website, scrapedSection, companyName, website,
+		companyName, website, locationContext, scrapedSection, companyName, website,
 	)
 }
 

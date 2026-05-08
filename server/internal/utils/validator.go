@@ -30,6 +30,14 @@ func ValidateDomain(domain string) bool {
 	domain = strings.TrimPrefix(domain, "https://")
 	domain = strings.TrimPrefix(domain, "www.")
 
+	// Remove path, query, and fragment (keep only the domain part)
+	if idx := strings.IndexAny(domain, "/?#"); idx != -1 {
+		domain = domain[:idx]
+	}
+
+	// Remove trailing slashes
+	domain = strings.TrimSuffix(domain, "/")
+
 	// Check if it contains at least one dot
 	if !strings.Contains(domain, ".") {
 		return false

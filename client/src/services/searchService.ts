@@ -12,9 +12,14 @@ export interface Lead {
   createdAt?: string;
 }
 
-export async function searchLeads(query: string): Promise<Lead[]> {
+export async function searchLeads(query: string, location?: string): Promise<Lead[]> {
   try {
-    const response = await api.post("/search", { query });
+    const requestBody = {
+      query,
+      ...(location && { location }), // Include location only if provided
+    };
+
+    const response = await api.post("/search", requestBody);
     
     if (!response.data) {
       throw new Error("No response from server");

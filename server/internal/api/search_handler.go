@@ -14,7 +14,8 @@ import (
 )
 
 type SearchRequest struct {
-	Query string `json:"query"`
+	Query    string `json:"query"`
+	Location string `json:"location,omitempty"`
 }
 
 type SearchResponse struct {
@@ -67,16 +68,27 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Search request from user %s: %s", userID, req.Query)
+	log.Printf("Search request from user %s: %s (Location: %s)", userID, req.Query, req.Location)
 
 	// Get database and create lead service
 	db := database.Get()
 	leadService := services.NewLeadService(db)
 
-	// Perform search and enrichment
-	leads, err := leadService.SearchAndEnrichLeads(req.Query, userObjectID)
+	// Perform search and enrichment with location
+	leads, err := leadService.SearchAndEnrichLeads(req.Query, req.Location, userObjectID)
 	if err != nil {
 		log.Printf("Search error: %v", err)
+
+		// Check if it's a validation error (should return 400 instead of 500)
+		if _, ok := err.(*services.ValidationError); ok {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(SearchResponse{
+				Success: false,
+				Message: err.Error(),
+			})
+			return
+		}
+
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(SearchResponse{
 			Success: false,

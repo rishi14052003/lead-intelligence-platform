@@ -49,7 +49,7 @@ func NewLeadService(db *database.Database) *LeadService {
 }
 
 // SearchAndEnrichLeads performs a complete AI-powered search and enrichment workflow
-func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.ObjectID) ([]models.Lead, error) {
+func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userID primitive.ObjectID) ([]models.Lead, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -60,8 +60,19 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	query = utils.SanitizeInput(query)
 	companyName := strings.TrimSpace(query)
+	location = strings.TrimSpace(location)
 
-	log.Printf("🔎 Starting AI lead search for: %s", companyName)
+	searchTerm := companyName
+	if location != "" {
+		searchTerm = companyName + " " + location
+	}
+
+	log.Printf("🔎 Starting AI lead search")
+	log.Printf("📌 Company: %s", companyName)
+	if location != "" {
+		log.Printf("📍 Location: %s (city, state, or country)", location)
+		log.Printf("🔍 Combined Search Term: %s", searchTerm)
+	}
 
 	search := &models.Search{
 		UserID:    userID,
@@ -78,12 +89,20 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	searchObjID, _ := searchID.(primitive.ObjectID)
 
-	// Step 1: Find official website
-	website, _ := ls.googleScraper.FindOfficialWebsite(companyName)
-	if website != "" {
-		log.Printf("✓ Found official website: %s", website)
+	// Step 1: Check if input is a domain, otherwise find official website
+	var website string
+	isDomainInput := utils.ValidateDomain(companyName)
+
+	if isDomainInput {
+		website = utils.FormatDomain(companyName)
+		log.Printf("✓ Direct domain input detected: %s", website)
 	} else {
-		log.Printf("⚠️ Could not find official website for: %s", companyName)
+		website, _ = ls.googleScraper.FindOfficialWebsite(searchTerm)
+		if website != "" {
+			log.Printf("✓ Found official website via Serper: %s", website)
+		} else {
+			log.Printf("⚠️ Could not find official website for: %s", searchTerm)
+		}
 	}
 
 	// Step 2: Concurrent scraping
@@ -101,10 +120,11 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 		var allProfiles []map[string]string
 		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
 		for _, role := range roles {
-			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+			// Use searchTerm (company + location) for more precise LinkedIn search
+			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(searchTerm, role)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
 			if err != nil {
-				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
+				log.Printf("⚠️ LinkedIn search for %s %s: %v", searchTerm, role, err)
 				continue
 			}
 			if len(profiles) > 0 {
@@ -157,7 +177,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 	if ls.grokService != nil {
 		log.Println("🤖 Sending data to Grok AI for enrichment...")
 		var grokErr error
-		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, liRes.profiles, websiteDataForGrok, websiteText)
+		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, location, liRes.profiles, websiteDataForGrok, websiteText)
 		if grokErr != nil {
 			log.Printf("⚠️ Grok enrichment failed: %v", grokErr)
 		} else {
@@ -261,6 +281,12 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 	}
 
 	log.Printf("🎯 FINAL LEADS COUNT: %d", len(leads))
+
+	if len(leads) == 0 {
+		log.Printf("⚠️ No leads found for '%s'. This may be a small/local company not indexed by LinkedIn or public sources.", companyName)
+		log.Printf("📌 Website scraped: %s", website)
+		log.Printf("📊 Raw data collected - LinkedIn profiles: %d, Website pages: %d", len(liRes.profiles), len(webRes.result.Pages))
+	}
 
 	// Step 9: Leads are NOT auto-saved to database - only saved when user explicitly clicks save
 	log.Printf("⚠️ DEBUG: About to finalise search - NOT saving leads to database")
