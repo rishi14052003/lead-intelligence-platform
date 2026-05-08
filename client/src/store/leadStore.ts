@@ -14,7 +14,7 @@ type State = {
 
   setRoleFilter: (role: string | null) => void;
 
-  search: (query: string) => Promise<Lead[]>;
+  search: (query: string, location?: string) => Promise<Lead[]>;
 
   restoreSearchResults: () => void;
 

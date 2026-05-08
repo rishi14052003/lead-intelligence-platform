@@ -48,7 +48,7 @@ function StatCard({
   );
 }
 
-function EmptyState({ icon: IconComp = Bookmark, title, subtitle }: { icon?: any; title: string; subtitle: string }) {
+function EmptyState({ icon: IconComp = Bookmark, title, subtitle }: { icon?: LucideIcon; title: string; subtitle: string }) {
   return (
     <div className="empty-state">
       <div className="empty-icon">{IconComp && <IconComp size={20} />}</div>
@@ -83,9 +83,10 @@ export default function SavedLeads() {
   }, [fetchSavedLeads]);
 
   // Reset to page 1 when leads change
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    setCurrentPage(1);
-  }, [leads.length]);
+    if (currentPage !== 1) setCurrentPage(1);
+  }, [leads.length, currentPage]);
 
   const toggleLeadSelection = (index: number) => {
     const newSelected = new Set(selectedLeads);

@@ -48,7 +48,7 @@ function StatCard({
   );
 }
 
-function Card({ title, extra, children, style }: { title?: string; extra?: any; children: any; style?: any }) {
+function Card({ title, extra, children, style }: { title?: string; extra?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div className="card" style={style}>
       {(title || extra) && (
@@ -286,7 +286,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetchSavedLeads();
     console.log("📊 Dashboard fetched saved leads:", savedLeads.length);
-  }, [fetchSavedLeads]);
+  }, [fetchSavedLeads, savedLeads.length]);
 
   const getDateRange = () => {
     if (performancePeriod === 'week') return getWeekRange();
@@ -383,10 +383,11 @@ export default function Dashboard() {
     return buckets;
   })();
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    setHistoryPage(1);
-    setCompaniesPage(1);
-  }, [history.length]);
+    if (historyPage !== 1) setHistoryPage(1);
+    if (companiesPage !== 1) setCompaniesPage(1);
+  }, [history.length, historyPage, companiesPage]);
 
   const rowSurfaceStyle: React.CSSProperties = {
     background: "var(--surface2)",

@@ -1,7 +1,6 @@
 import type { Lead } from "./searchService";
 
 const SEARCH_RESULTS_KEY = "searchResults";
-const SEARCH_QUERY_KEY = "searchQuery";
 
 export interface StoredSearchResults {
   query: string;
