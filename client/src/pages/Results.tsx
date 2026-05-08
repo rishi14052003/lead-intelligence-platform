@@ -88,6 +88,15 @@ export default function Results() {
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
+  const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
+  
+  // Restore search results from localStorage on mount
+  useEffect(() => {
+    if (leads.length === 0) {
+      console.log("📋 No leads in store, attempting to restore from localStorage");
+      restoreSearchResults();
+    }
+  }, []);
   
   // Load saved lead IDs on mount to check which are already saved
   useEffect(() => {

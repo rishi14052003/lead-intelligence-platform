@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { searchLeads } from "../services/searchService";
 import { getSavedLeads, clearAllLeads } from "../services/leadService";
+import { saveSearchResultsToStorage, getSearchResultsFromStorage, clearSearchResultsFromStorage } from "../services/searchResultsService";
 import { useAuthStore } from "./authStore";
 import type { Lead } from "../services/searchService";
 
@@ -9,10 +10,13 @@ type State = {
   loading: boolean;
   error: string | null;
   roleFilter: string | null;
+  searchQuery: string | null;
 
   setRoleFilter: (role: string | null) => void;
 
   search: (query: string) => Promise<Lead[]>;
+
+  restoreSearchResults: () => void;
 
   fetchSavedLeads: () => Promise<void>;
 
@@ -30,12 +34,29 @@ export const useLeadStore = create<State>((set) => ({
 
   roleFilter: null,
 
+  searchQuery: null,
+
   setRoleFilter: (role) => {
     console.log("🎯 ROLE FILTER:", role);
 
     set({
       roleFilter: role,
     });
+  },
+
+  restoreSearchResults: () => {
+    console.log("🔄 ATTEMPTING TO RESTORE SEARCH RESULTS FROM STORAGE");
+    
+    const stored = getSearchResultsFromStorage();
+    if (stored) {
+      console.log("✅ RESTORED SEARCH RESULTS:", stored.results.length, "results for query:", stored.query);
+      set({
+        leads: stored.results,
+        searchQuery: stored.query,
+      });
+    } else {
+      console.log("ℹ️ NO STORED SEARCH RESULTS FOUND");
+    }
   },
 
   search: async (query: string) => {
@@ -60,8 +81,12 @@ export const useLeadStore = create<State>((set) => ({
 
       console.log("📊 LEADS COUNT:", leads?.length || 0);
 
+      // Save search results to localStorage
+      saveSearchResultsToStorage(query, leads);
+
       set({
         leads,
+        searchQuery: query,
         loading: false,
       });
 
@@ -144,8 +169,11 @@ export const useLeadStore = create<State>((set) => ({
 
     console.log("🗑 CLEARING LEADS");
 
+    clearSearchResultsFromStorage();
+
     set({
       leads: [],
+      searchQuery: null,
       error: null,
     });
   },
