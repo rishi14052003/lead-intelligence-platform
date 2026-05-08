@@ -189,7 +189,7 @@ Identify real executives at "%s" (website: %s).
 RULES:
 1. Only real people with real full names. No placeholders.
 2. Never guess emails. Set email to null if unknown.
-3. Prioritize: CEO, CTO, Founder, HR Head, VP Engineering.
+3. Prioritize: CEO, CTO, Founder, HR Head, Head of Sales, Vice President.
 4. Use your own knowledge if scraped data is missing.
 5. LinkedIn URLs must be real. Leave blank if unsure.
 6. Confidence: CEO/Founder=95, CTO=90, VP=85, HR=80, Director=75, Manager=70.

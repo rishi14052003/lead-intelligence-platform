@@ -99,7 +99,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 
 	go func() {
 		var allProfiles []map[string]string
-		roles := []string{"CEO", "CTO", "Founder", "HR"}
+		roles := []string{"CEO", "CTO", "HR", "Head of Sales", "Vice President"}
 		for _, role := range roles {
 			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
