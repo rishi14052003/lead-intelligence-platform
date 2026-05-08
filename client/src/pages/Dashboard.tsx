@@ -285,6 +285,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchSavedLeads();
+    console.log("📊 Dashboard fetched saved leads:", savedLeads.length);
   }, [fetchSavedLeads]);
 
   const getDateRange = () => {

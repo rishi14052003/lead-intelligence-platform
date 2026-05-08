@@ -263,11 +263,29 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, userID primitive.Objec
 	log.Printf("🎯 FINAL LEADS COUNT: %d", len(leads))
 
 	// Step 9: Leads are NOT auto-saved to database - only saved when user explicitly clicks save
+	log.Printf("⚠️ DEBUG: About to finalise search - NOT saving leads to database")
 
 	// Step 10: Update search record
 	ls.finaliseSearch(ctx, searchID, len(leads), website)
 
-	log.Printf("✅ Search complete. Returning %d leads for '%s'", len(leads), companyName)
+	log.Printf("✅ Search complete. Returning %d leads for '%s' WITHOUT SAVING TO DATABASE", len(leads), companyName)
+
+	// Explicitly verify no leads are being saved to database
+	collection := ls.db.Instance.Collection("leads")
+	count, _ := collection.CountDocuments(ctx, bson.M{"searchId": searchObjID})
+	log.Printf("🔍 DEBUG: Current leads in database for this search: %d", count)
+
+	// CRITICAL: If leads were auto-saved, delete them to prevent auto-save behavior
+	if count > 0 {
+		log.Printf("⚠️ WARNING: Found %d leads in database for this search - DELETING THEM to prevent auto-save", count)
+		_, deleteErr := collection.DeleteMany(ctx, bson.M{"searchId": searchObjID})
+		if deleteErr != nil {
+			log.Printf("❌ ERROR deleting auto-saved leads: %v", deleteErr)
+		} else {
+			log.Printf("✅ DELETED %d auto-saved leads", count)
+		}
+	}
+
 	return leads, nil
 }
 

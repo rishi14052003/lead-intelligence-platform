@@ -223,6 +223,8 @@ func SaveLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("🔴 BACKEND SAVE LEADS CALLED - User %s attempting to save %d leads", userID, len(req.Leads))
+
 	if len(req.Leads) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
@@ -256,10 +258,13 @@ func SaveLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		_, err := collection.InsertOne(ctx, lead)
 		if err == nil {
 			savedCount++
+			log.Printf("✅ BACKEND SAVED LEAD: %s | %s | %s", lead.Name, lead.Role, lead.Company)
 		} else {
-			log.Printf("Error saving lead: %v", err)
+			log.Printf("❌ BACKEND ERROR SAVING LEAD: %v", err)
 		}
 	}
+
+	log.Printf("✅ BACKEND SAVE COMPLETE - Saved %d out of %d leads for user %s", savedCount, len(req.Leads), userID)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{

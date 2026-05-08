@@ -76,10 +76,12 @@ export async function clearAllLeads(): Promise<void> {
 
 export async function saveLeads(leads: Lead[]): Promise<{ success: boolean; message: string; count: number }> {
 	try {
+		console.log("🔴 SAVE LEADS CALLED - Attempting to save", leads.length, "leads to database");
 		const response = await api.post("/leads/save", { leads });
+		console.log("✅ SAVE LEADS SUCCESS - Saved", response.data.count, "leads");
 		return response.data;
 	} catch (error) {
-		console.error("Error saving leads:", error);
+		console.error("❌ SAVE LEADS ERROR:", error);
 		throw error;
 	}
 }
