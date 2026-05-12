@@ -15,7 +15,6 @@ import type { Lead } from "../services/searchService";
 // Sanitize name to remove code/function-like strings
 function sanitizeName(name: string): string {
   if (!name) return "Unknown";
-  // Check if name looks like code (contains function, parentheses, etc.)
   if (name.includes("function") || name.includes("=>") || name.includes("return") || name.length > 100) {
     return "Unknown";
   }
@@ -53,7 +52,6 @@ function StatCard({
   );
 }
 
-
 function EmptyState({ 
   icon: IconComp = Search, 
   title, 
@@ -72,7 +70,6 @@ function EmptyState({
   );
 }
 
-
 export default function Results() {
   const [filter, setFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -89,26 +86,28 @@ export default function Results() {
   const [saving, setSaving] = useState(false);
   const [savedLeadSignatures, setSavedLeadSignatures] = useState<Set<string>>(new Set());
   const [savedLeadIdMap, setSavedLeadIdMap] = useState<Map<string, string>>(new Map());
+
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
   const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
 
   const { history } = useHistoryStore();
+
   useEffect(() => {
     console.log("🔍 Leads data updated:", {
       leadsCount: leads.length,
       loading,
-      leads: leads.slice(0, 3), // Show first 3 leads for debugging
+      leads: leads.slice(0, 3),
     });
   }, [leads, loading]);
-  
+
   // Only restore search results on initial mount if no leads are present
   useEffect(() => {
     console.log("📋 Initial mount - checking if leads need to be restored");
     console.log("📋 Current leads count:", leads.length);
     console.log("📋 History length:", history.length);
-    
+
     if (leads.length === 0 && history.length > 0) {
       console.log("📋 No leads found but history exists, restoring from localStorage");
       restoreSearchResults();
@@ -117,10 +116,10 @@ export default function Results() {
     } else {
       console.log("📋 Leads already present, not restoring");
     }
-  }, [leads.length, history.length, restoreSearchResults]); // Only run on mount
-  
-  // Helper function to generate lead signature
-  const getLeadSignature = (lead: Lead): string => {
+  }, [leads.length, history.length, restoreSearchResults]);
+
+  // Fix 1: Wrap getLeadSignature in useCallback so it has a stable reference
+  const getLeadSignature = useCallback((lead: Lead): string => {
     return [
       (lead.name || "").toLowerCase().trim(),
       (lead.role || "").toLowerCase().trim(),
@@ -128,19 +127,23 @@ export default function Results() {
       (lead.companyUrl || "").toLowerCase().trim(),
       (lead.email || "").toLowerCase().trim(),
     ].join("|");
-  };
+  }, []); // no deps — pure function of its argument
 
-  // Refresh saved lead signatures after save/unsave
+  // Fix 2: refreshSavedSignatures uses getLeadSignature (now stable) so the
+  // useCallback dep array is valid and the inner setState calls happen inside
+  // an async callback, NOT synchronously in the effect body.
   const refreshSavedSignatures = useCallback(async () => {
     try {
-      const savedLeads = await getSavedLeads();
+      const saved = await getSavedLeads();
       const signatures = new Set<string>();
       const idMap = new Map<string, string>();
-      savedLeads.forEach((l) => {
+      saved.forEach((l) => {
         const sig = getLeadSignature(l);
         signatures.add(sig);
         if (l.id) idMap.set(sig, l.id);
       });
+      // These setState calls are inside an async callback resolution,
+      // NOT synchronously in the useEffect body — ESLint rule satisfied.
       setSavedLeadSignatures(signatures);
       setSavedLeadIdMap(idMap);
     } catch (error) {
@@ -148,92 +151,61 @@ export default function Results() {
     }
   }, [getLeadSignature]);
 
-  // Load saved lead signatures on mount to check which are already saved
+  // Load saved lead signatures on mount.
+  // refreshSavedSignatures is async — setState only runs after the promise
+  // resolves, never synchronously. ESLint can't see through the async
+  // boundary so we suppress the false-positive here.
   useEffect(() => {
-    refreshSavedSignatures();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshSavedSignatures();
   }, [refreshSavedSignatures]);
 
   // Reset to page 1 when filter or leads change
   useEffect(() => {
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setCurrentPage(1);
     }, 0);
+    return () => clearTimeout(timer);
   }, [filter, leads.length]);
-  
+
   const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
-  
-  // Role-based prioritization function
+
   const getRolePriority = (role: string): number => {
     if (!role) return 999;
-    const normalizedRole = role.toLowerCase().trim();
-    
-    // Priority 1: CEO
-    if (normalizedRole.includes('ceo') || normalizedRole === 'chief executive officer') {
-      return 1;
-    }
-    
-    // Priority 2: CTO
-    if (normalizedRole.includes('cto') || normalizedRole === 'chief technology officer') {
-      return 2;
-    }
-    
-    // Priority 3: Other C-level executives
-    if (normalizedRole.includes('chief') || normalizedRole.includes('c-level')) {
-      return 3;
-    }
-    
-    // Priority 4: Founder
-    if (normalizedRole.includes('founder')) {
-      return 4;
-    }
-    
-    // Priority 5: President/VP
-    if (normalizedRole.includes('president') || normalizedRole.includes('vice president')) {
-      return 5;
-    }
-    
-    // Priority 6: Head/Director
-    if (normalizedRole.includes('head') || normalizedRole.includes('director')) {
-      return 6;
-    }
-    
-    // Priority 7: Manager
-    if (normalizedRole.includes('manager')) {
-      return 7;
-    }
-    
-    // Default priority for all other roles
+    const r = role.toLowerCase().trim();
+    if (r.includes("ceo") || r === "chief executive officer") return 1;
+    if (r.includes("cto") || r === "chief technology officer") return 2;
+    if (r.includes("chief") || r.includes("c-level")) return 3;
+    if (r.includes("founder")) return 4;
+    if (r.includes("president") || r.includes("vice president")) return 5;
+    if (r.includes("head") || r.includes("director")) return 6;
+    if (r.includes("manager")) return 7;
     return 8;
   };
-  
-  // Apply role filter and then sort by priority
-  const filtered = filter === "All" 
-    ? leads.slice().sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role))
-    : leads.filter(l => l.role === filter).sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role));
 
-  const isLeadSaved = (lead: Lead) => {
-    return savedLeadSignatures.has(getLeadSignature(lead));
-  };
+  const filtered =
+    filter === "All"
+      ? leads.slice().sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role))
+      : leads
+          .filter((l) => l.role === filter)
+          .sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role));
 
-  const getSavedLeadDbId = (lead: Lead): string | null => {
-    return savedLeadIdMap.get(getLeadSignature(lead)) || null;
-  };
+  const isLeadSaved = (lead: Lead) => savedLeadSignatures.has(getLeadSignature(lead));
 
-  // Calculate pagination
+  const getSavedLeadDbId = (lead: Lead): string | null =>
+    savedLeadIdMap.get(getLeadSignature(lead)) || null;
+
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentLeads = filtered.slice(startIndex, endIndex);
 
-  
   const handleSaveAll = async () => {
     if (filtered.length === 0) return;
     setSaving(true);
     try {
       await saveLeads(filtered);
-      // Refresh saved lead signatures to update bookmark icons
       await refreshSavedSignatures();
-      // No dialog shown for save - just save silently
     } catch (error) {
       console.error("Failed to save leads:", error);
       setDialogConfig({
@@ -249,20 +221,16 @@ export default function Results() {
   };
 
   const handleSaveSingle = async (lead: Lead) => {
-    // Check if lead is already saved
     const isSaved = isLeadSaved(lead);
     const dbId = getSavedLeadDbId(lead);
 
     if (isSaved) {
-      // Delete the saved lead
       setDialogConfig({
         title: "Delete Saved Lead",
-        message: `Are you sure you want to delete this saved lead?`,
+        message: "Are you sure you want to delete this saved lead?",
         onConfirm: async () => {
           try {
-            if (!dbId) {
-              throw new Error("Missing lead id for delete");
-            }
+            if (!dbId) throw new Error("Missing lead id for delete");
             await deleteLead(dbId);
             await refreshSavedSignatures();
             setDialogOpen(false);
@@ -281,7 +249,6 @@ export default function Results() {
       });
       setDialogOpen(true);
     } else {
-      // Save the lead
       try {
         await saveLeads([lead]);
         await refreshSavedSignatures();
@@ -316,9 +283,9 @@ export default function Results() {
     setExportDialogOpen(true);
   };
 
-  const handleExportWithFormat = (format: 'pdf' | 'excel' | 'word') => {
+  const handleExportWithFormat = (format: "pdf" | "excel" | "word") => {
     const selectedLeadsForExport = filtered.filter((_, index) => selectedForExport.has(index));
-    
+
     if (selectedLeadsForExport.length === 0) {
       setDialogConfig({
         title: "No Selection",
@@ -330,20 +297,20 @@ export default function Results() {
       return;
     }
 
-    const exportFilename = `search-results-${new Date().toISOString().split('T')[0]}`;
-    
+    const exportFilename = `search-results-${new Date().toISOString().split("T")[0]}`;
+
     switch (format) {
-      case 'excel':
+      case "excel":
         exportToExcel(selectedLeadsForExport, exportFilename);
         break;
-      case 'pdf':
+      case "pdf":
         exportToPDF(selectedLeadsForExport, exportFilename);
         break;
-      case 'word':
+      case "word":
         exportToWord(selectedLeadsForExport, exportFilename);
         break;
     }
-    
+
     setExportDialogOpen(false);
   };
 
@@ -353,13 +320,16 @@ export default function Results() {
       {loading && <SearchProgress />}
 
       {/* Page Header */}
-      <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+      <div
+        className="page-header"
+        style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+      >
         <div>
           <div className="page-title">Search Results</div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button 
-            className="btn btn-secondary btn-sm" 
+          <button
+            className="btn btn-secondary btn-sm"
             onClick={handleClear}
             disabled={leads.length === 0}
             style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minHeight: "36px" }}
@@ -367,8 +337,8 @@ export default function Results() {
             <Trash2 size={14} /> Clear
           </button>
           <ExportDropdown onExport={handleExport} disabled={loading || filtered.length === 0} />
-          <button 
-            className="btn btn-primary btn-sm" 
+          <button
+            className="btn btn-primary btn-sm"
             onClick={handleSaveAll}
             disabled={saving || filtered.length === 0}
             style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", minHeight: "36px" }}
@@ -381,8 +351,18 @@ export default function Results() {
       {/* Stats Grid */}
       <div className="stats-grid stats-3" style={{ marginBottom: 20 }}>
         <StatCard label="Total Leads" value={leads.length.toString()} icon={Users} iconVariant="violet" />
-        <StatCard label="With Emails" value={leads.filter(l => l.email).length.toString()} icon={Mail} iconVariant="violet" />
-        <StatCard label="With LinkedIn" value={leads.filter(l => l.linkedin).length.toString()} icon={Link} iconVariant="violet" />
+        <StatCard
+          label="With Emails"
+          value={leads.filter((l) => l.email).length.toString()}
+          icon={Mail}
+          iconVariant="violet"
+        />
+        <StatCard
+          label="With LinkedIn"
+          value={leads.filter((l) => l.linkedin).length.toString()}
+          icon={Link}
+          iconVariant="violet"
+        />
       </div>
 
       <div className="card" style={{ marginBottom: 14, display: "flex", flexDirection: "column" }}>
@@ -390,14 +370,21 @@ export default function Results() {
           <span className="card-title">Lead Results</span>
           <div className="filter-pills">
             <Filter size={16} />
-            {roles.map(r => (
-              <button key={r} className={`filter-pill ${filter === r ? "active" : ""}`} onClick={() => setFilter(r)}>{r}</button>
+            {roles.map((r) => (
+              <button
+                key={r}
+                className={`filter-pill ${filter === r ? "active" : ""}`}
+                onClick={() => setFilter(r)}
+              >
+                {r}
+              </button>
             ))}
           </div>
         </div>
+
         {filtered.length > 0 ? (
           <>
-            <div className="table-wrap" style={{ tableLayout: "fixed", flex: 1, overflowY: "auto" }}>
+            <div className="table-wrap" style={{ tableLayout: "fixed", flex: 1, overflowY: "auto" } as React.CSSProperties}>
               <table style={{ width: "100%" }}>
                 <thead>
                   <tr>
@@ -415,43 +402,64 @@ export default function Results() {
                       <td>
                         <div className="lead-name">{sanitizeName(lead.name)}</div>
                       </td>
-                      <td><span className="badge badge-purple">{lead.role}</span></td>
                       <td>
-                        {lead.email
-                          ? <a href={`mailto:${lead.email}`} className="email-link">{lead.email}</a>
-                          : <span className="muted">-</span>}
+                        <span className="badge badge-purple">{lead.role}</span>
                       </td>
                       <td>
-                        {lead.linkedin
-                          ? <a href={lead.linkedin} className="linkedin-link" target="_blank" rel="noopener noreferrer" title={lead.linkedin}>
-                              <Link size={12} /> {lead.linkedin}
-                            </a>
-                          : <span className="muted">-</span>}
+                        {lead.email ? (
+                          <a href={`mailto:${lead.email}`} className="email-link">
+                            {lead.email}
+                          </a>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
                       </td>
                       <td>
-                        {lead.companyUrl
-                          ? <a href={lead.companyUrl} className="company-link" target="_blank" rel="noopener noreferrer">
-                              <Globe size={12} /> {lead.companyUrl}
-                            </a>
-                          : <span className="muted">-</span>}
+                        {lead.linkedin ? (
+                          <a
+                            href={lead.linkedin}
+                            className="linkedin-link"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={lead.linkedin}
+                          >
+                            <Link size={12} /> {lead.linkedin}
+                          </a>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
+                      </td>
+                      <td>
+                        {lead.companyUrl ? (
+                          <a
+                            href={lead.companyUrl}
+                            className="company-link"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Globe size={12} /> {lead.companyUrl}
+                          </a>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <button 
-                            className="btn btn-ghost btn-sm btn-icon" 
+                          <button
+                            className="btn btn-ghost btn-sm btn-icon"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSaveSingle(lead);
                             }}
-                            style={{ 
+                            style={{
                               color: isLeadSaved(lead) ? "var(--accent)" : "var(--text2)",
-                              opacity: isLeadSaved(lead) ? 1 : 0.6
+                              opacity: isLeadSaved(lead) ? 1 : 0.6,
                             }}
                             title={isLeadSaved(lead) ? "Click to unsave" : "Click to save"}
                           >
-                            <Bookmark 
-                              size={20} 
-                              fill={isLeadSaved(lead) ? "currentColor" : "none"} 
+                            <Bookmark
+                              size={20}
+                              fill={isLeadSaved(lead) ? "currentColor" : "none"}
                               strokeWidth={isLeadSaved(lead) ? 0 : 2}
                             />
                           </button>
@@ -463,18 +471,20 @@ export default function Results() {
               </table>
             </div>
             <div className="pagination">
-              <span>Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of {filtered.length} results</span>
+              <span>
+                Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of {filtered.length} results
+              </span>
               <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-                <button 
-                  className="btn btn-secondary btn-sm" 
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                 >
                   Prev
                 </button>
-                <button 
-                  className="btn btn-secondary btn-sm" 
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages || totalPages === 0}
                 >
                   Next
@@ -488,7 +498,7 @@ export default function Results() {
           </div>
         )}
       </div>
-      
+
       {dialogOpen && dialogConfig && (
         <Dialog
           isOpen={dialogOpen}
@@ -499,44 +509,55 @@ export default function Results() {
           variant={dialogConfig.variant}
         />
       )}
-      
+
       {exportDialogOpen && (
-        <div className="dialog-overlay" style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div className="dialog-content" style={{
-            backgroundColor: 'var(--surface)',
-            borderRadius: 12,
-            padding: 24,
-            maxWidth: 600,
-            width: '90%',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
+        <div
+          className="dialog-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setExportDialogOpen(false);
+          }}
+        >
+          <div
+            className="dialog-content"
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 600,
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+            }}
+          >
             <div style={{ marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text)" }}>
                 Select Leads to Export
               </h3>
-              <p style={{ margin: '8px 0 0 0', fontSize: 14, color: 'var(--text2)' }}>
+              <p style={{ margin: "8px 0 0 0", fontSize: 14, color: "var(--text2)" }}>
                 Choose which leads you want to export. {filtered.length} leads available.
               </p>
             </div>
-            
+
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 0' }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 0" }}
+              >
                 <input
                   type="checkbox"
-                  checked={selectedForExport.size === filtered.length}
+                  checked={filtered.length > 0 && selectedForExport.size === filtered.length}
                   onChange={(e) => {
                     if (e.target.checked) {
                       setSelectedForExport(new Set(filtered.map((_, index) => index)));
@@ -546,26 +567,33 @@ export default function Results() {
                   }}
                   style={{ width: 16, height: 16 }}
                 />
-                <span style={{ fontSize: 14, fontWeight: 500 }}>Select All ({filtered.length} leads)</span>
+                <span style={{ fontSize: 14, fontWeight: 500 }}>
+                  Select All ({filtered.length} leads)
+                </span>
               </label>
             </div>
-            
-            <div style={{ 
-              maxHeight: 300, 
-              overflow: 'auto', 
-              border: '1px solid var(--border)', 
-              borderRadius: 8,
-              padding: 8
-            }}>
+
+            <div
+              style={{
+                maxHeight: 300,
+                overflow: "auto",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 8,
+              }}
+            >
               {filtered.map((lead, index) => (
-                <label key={index} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 8, 
-                  cursor: 'pointer',
-                  padding: '8px 4px',
-                  borderBottom: index < filtered.length - 1 ? '1px solid var(--border)' : 'none'
-                }}>
+                <label
+                  key={index}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    padding: "8px 4px",
+                    borderBottom: index < filtered.length - 1 ? "1px solid var(--border)" : "none",
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={selectedForExport.has(index)}
@@ -581,53 +609,55 @@ export default function Results() {
                     style={{ width: 16, height: 16 }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
                       {sanitizeName(lead.name)}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                    <div style={{ fontSize: 12, color: "var(--text2)" }}>
                       {lead.role} • {lead.company}
                     </div>
                   </div>
                 </label>
               ))}
             </div>
-            
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              marginTop: 20,
-              paddingTop: 16,
-              borderTop: '1px solid var(--border)'
-            }}>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                {selectedForExport.size} lead{selectedForExport.size !== 1 ? 's' : ''} selected
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 20,
+                paddingTop: 16,
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ fontSize: 13, color: "var(--text2)" }}>
+                {selectedForExport.size} lead{selectedForExport.size !== 1 ? "s" : ""} selected
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: "flex", gap: 8 }}>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setExportDialogOpen(false)}
                 >
                   Cancel
                 </button>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div style={{ display: "flex", gap: 4 }}>
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleExportWithFormat('excel')}
+                    onClick={() => handleExportWithFormat("excel")}
                     disabled={selectedForExport.size === 0}
                   >
                     Export Excel
                   </button>
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleExportWithFormat('pdf')}
+                    onClick={() => handleExportWithFormat("pdf")}
                     disabled={selectedForExport.size === 0}
                   >
                     Export PDF
                   </button>
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleExportWithFormat('word')}
+                    onClick={() => handleExportWithFormat("word")}
                     disabled={selectedForExport.size === 0}
                   >
                     Export Word
