@@ -110,6 +110,14 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		}
 	}
 
+	linkedinCompanyURL, _ := ls.googleScraper.FindLinkedInCompanyPage(companyName, website)
+	linkedinCompanySlug := scraper.LinkedInCompanySlugFromURL(linkedinCompanyURL)
+	if linkedinCompanyURL != "" {
+		log.Printf("🏢 LinkedIn company page: %s (slug=%s)", linkedinCompanyURL, linkedinCompanySlug)
+	} else {
+		log.Printf("⚠️ Proceeding without LinkedIn company page; people search uses company name only")
+	}
+
 	// Step 2: Concurrent scraping
 	type linkedinResult struct {
 		profiles []map[string]string
@@ -125,7 +133,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		var allProfiles []map[string]string
 		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
 		for _, role := range roles {
-			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role, location)
+			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role, location, linkedinCompanySlug)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
 			if err != nil {
 				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
@@ -137,7 +145,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 		}
 		if len(allProfiles) == 0 {
-			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName, location)
+			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName, location, linkedinCompanySlug)
 			if err != nil {
 				log.Printf("⚠️ Leadership fallback search: %v", err)
 			} else if len(leadership) > 0 {
@@ -146,7 +154,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 		}
 		if len(allProfiles) == 0 {
-			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "", location)
+			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "", location, linkedinCompanySlug)
 			if err != nil {
 				log.Printf("⚠️ Generic LinkedIn fallback: %v", err)
 			} else if len(generic) > 0 {
@@ -195,11 +203,19 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 	}
 
 	// Step 4: Grok AI Enrichment
+	linkedinDataForGrok := liRes.profiles
+	if linkedinCompanyURL != "" {
+		linkedinDataForGrok = append([]map[string]string{{
+			"type":        "linkedin_company_page",
+			"url":         linkedinCompanyURL,
+			"description": "LinkedIn company page discovered via Serper; employee profiles should align with this org.",
+		}}, liRes.profiles...)
+	}
 	var enriched *EnrichedCompany
 	if ls.grokService != nil {
 		log.Println("🤖 Sending data to Grok AI for enrichment...")
 		var grokErr error
-		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, location, liRes.profiles, websiteDataForGrok, websiteText)
+		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, location, linkedinDataForGrok, websiteDataForGrok, websiteText)
 		if grokErr != nil {
 			log.Printf("⚠️ Grok enrichment failed: %v", grokErr)
 		} else {

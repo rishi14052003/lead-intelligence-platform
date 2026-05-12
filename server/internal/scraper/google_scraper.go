@@ -43,24 +43,43 @@ func NewGoogleScraper() *GoogleScraper {
 	}
 }
 
-// SearchLinkedInProfiles searches LinkedIn profiles. When location is non-empty (e.g. city), organic
-// snippets must mention it to reduce unrelated profiles from other regions.
-func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location string) ([]map[string]string, error) {
+// SearchLinkedInProfiles searches LinkedIn profiles (via Serper/Google). When linkedinCompanySlug is set
+// (from FindLinkedInCompanyPage), queries and snippet checks are grounded to that LinkedIn company page.
+func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedinCompanySlug string) ([]map[string]string, error) {
 	company = strings.TrimSpace(company)
 	role = strings.TrimSpace(role)
 	location = strings.TrimSpace(location)
+	slug := strings.TrimSpace(linkedinCompanySlug)
 
 	var queries []string
 	if role != "" {
-		queries = []string{
-			fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
-			fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
-			fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
+		if slug != "" {
+			queries = append(queries,
+				fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
+				fmt.Sprintf(`site:linkedin.com/in/ "%s" linkedin.com/company/%s`, role, slug),
+				fmt.Sprintf(`"%s" "%s" site:linkedin.com/in/`, company, role),
+				fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
+				fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
+			)
+		} else {
+			queries = []string{
+				fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
+				fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
+				fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
+			}
 		}
 	} else {
-		queries = []string{
-			fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
-			fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
+		if slug != "" {
+			queries = append(queries,
+				fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
+				fmt.Sprintf(`site:linkedin.com/in/ linkedin.com/company/%s`, slug),
+				fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
+			)
+		} else {
+			queries = []string{
+				fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
+				fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
+			}
 		}
 	}
 
@@ -72,7 +91,7 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location string) 
 		log.Printf("QUERY => %s", q)
 		log.Printf("========================================")
 
-		results, err := gs.searchViaSerper(q, role, company, location)
+		results, err := gs.searchViaSerper(q, role, company, location, slug)
 		if err == nil && len(results) > 0 {
 			return results, nil
 		}
@@ -82,7 +101,8 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location string) 
 }
 
 // searchViaSerper uses Serper API
-func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locationHint string) ([]map[string]string, error) {
+func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locationHint, linkedinCompanySlug string) ([]map[string]string, error) {
+	linkedinCompanySlug = strings.TrimSpace(linkedinCompanySlug)
 	payloadBytes, err := json.Marshal(map[string]string{"q": query})
 	if err != nil {
 		return nil, err
@@ -130,7 +150,7 @@ func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locat
 			continue
 		}
 
-		if companyForSlugCheck != "" && !snippetReferencesCompany(item.Title, item.Snippet, companyForSlugCheck) {
+		if !snippetMatchesCompanyGrounding(item.Title, item.Snippet, link, companyForSlugCheck, linkedinCompanySlug) {
 			continue
 		}
 
@@ -280,10 +300,118 @@ func (gs *GoogleScraper) FindOfficialWebsite(company string) (string, error) {
 	return gs.fallbackWebsite(company), nil
 }
 
+// FindLinkedInCompanyPage discovers linkedin.com/company/{slug}/ via Serper after the corporate website is known.
+func (gs *GoogleScraper) FindLinkedInCompanyPage(companyName, website string) (string, error) {
+	companyName = strings.TrimSpace(companyName)
+	if companyName == "" {
+		return "", nil
+	}
+	if strings.TrimSpace(gs.serperKey) == "" {
+		log.Printf("⚠️ SERPER_API_KEY missing; skipping LinkedIn company page lookup")
+		return "", nil
+	}
+
+	queries := []string{
+		fmt.Sprintf(`site:linkedin.com/company "%s"`, companyName),
+		fmt.Sprintf(`"%s" site:linkedin.com/company`, companyName),
+	}
+	if lbl := primaryDomainLabelFromWebsite(website); lbl != "" {
+		queries = append(queries, fmt.Sprintf(`site:linkedin.com/company %s`, lbl))
+	}
+
+	for _, query := range queries {
+		payloadBytes, err := json.Marshal(map[string]string{"q": query})
+		if err != nil {
+			continue
+		}
+		req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("X-API-KEY", gs.serperKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := gs.client.Do(req)
+		if err != nil {
+			log.Printf("⚠️ Serper LinkedIn company search error: %v", err)
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("⚠️ Serper LinkedIn company search HTTP %d", resp.StatusCode)
+			continue
+		}
+		var result SerperResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			continue
+		}
+		for _, item := range result.Organic {
+			normalized := normalizeLinkedInCompanyPageURL(item.Link)
+			if normalized != "" {
+				log.Printf("✓ LinkedIn company page via Serper: %s", normalized)
+				return normalized, nil
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	log.Printf("⚠️ No LinkedIn company page found via Serper for %q", companyName)
+	return "", nil
+}
+
+// LinkedInCompanySlugFromURL returns the slug from a linkedin.com/company/{slug} URL.
+func LinkedInCompanySlugFromURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "company") && parts[1] != "" && !strings.EqualFold(parts[1], "about") {
+		return parts[1]
+	}
+	return ""
+}
+
+func primaryDomainLabelFromWebsite(webURL string) string {
+	parsed, err := url.Parse(webURL)
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+	if idx := strings.Index(host, "."); idx > 0 {
+		return host[:idx]
+	}
+	return host
+}
+
+func normalizeLinkedInCompanyPageURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Hostname(), "www."))
+	if host != "linkedin.com" && !strings.HasSuffix(host, ".linkedin.com") {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "company") {
+		slug := parts[1]
+		if slug == "" || strings.EqualFold(slug, "about") {
+			return ""
+		}
+		return "https://www.linkedin.com/company/" + slug + "/"
+	}
+	return ""
+}
+
 // SearchCompanyLeadership searches leadership profiles
-func (gs *GoogleScraper) SearchCompanyLeadership(company, location string) ([]map[string]string, error) {
+func (gs *GoogleScraper) SearchCompanyLeadership(company, location, linkedinCompanySlug string) ([]map[string]string, error) {
 	query := fmt.Sprintf(`site:linkedin.com/in/ "%s" CEO OR CTO OR Founder OR HR`, company)
-	return gs.searchViaSerper(query, "", strings.TrimSpace(company), strings.TrimSpace(location))
+	return gs.searchViaSerper(query, "", strings.TrimSpace(company), strings.TrimSpace(location), strings.TrimSpace(linkedinCompanySlug))
 }
 
 // fallbackWebsite creates basic domain fallback
@@ -377,13 +505,53 @@ func snippetReferencesCompany(title, snippet, company string) bool {
 	return strings.Contains(strings.ReplaceAll(hay, " ", ""), brand)
 }
 
+func snippetReferencesLinkedInCompanySlug(title, snippet, profileLink, slug string) bool {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return false
+	}
+	hay := strings.ToLower(title + " " + snippet + " " + profileLink)
+	if strings.Contains(hay, slug) {
+		return true
+	}
+	compactHay := strings.ReplaceAll(strings.ReplaceAll(hay, "-", ""), " ", "")
+	compactSlug := strings.ReplaceAll(slug, "-", "")
+	return strings.Contains(compactHay, compactSlug)
+}
+
+func snippetMatchesCompanyGrounding(title, snippet, profileLink, company, linkedinCompanySlug string) bool {
+	slug := strings.TrimSpace(linkedinCompanySlug)
+	co := strings.TrimSpace(company)
+
+	if slug != "" && co != "" {
+		return snippetReferencesCompany(title, snippet, co) || snippetReferencesLinkedInCompanySlug(title, snippet, profileLink, slug)
+	}
+	if slug != "" {
+		return snippetReferencesLinkedInCompanySlug(title, snippet, profileLink, slug)
+	}
+	if co != "" {
+		return snippetReferencesCompany(title, snippet, co)
+	}
+	return true
+}
+
 func snippetReferencesLocation(title, snippet, location string) bool {
 	location = strings.TrimSpace(location)
 	if location == "" {
 		return true
 	}
 	hay := strings.ToLower(title + " " + snippet)
-	return strings.Contains(hay, strings.ToLower(location))
+	locLower := strings.ToLower(location)
+	if strings.Contains(hay, locLower) {
+		return true
+	}
+	if idx := strings.Index(locLower, ","); idx > 0 {
+		city := strings.TrimSpace(locLower[:idx])
+		if len(city) >= 3 && strings.Contains(hay, city) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCompanyBrand(s string) string {
