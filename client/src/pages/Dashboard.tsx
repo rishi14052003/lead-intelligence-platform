@@ -278,6 +278,7 @@ export default function Dashboard() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [loadingCompanyData, setLoadingCompanyData] = useState<string | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const { history, loadFromLocalStorage, removeHistoryItem } = useHistoryStore();
   const { leads: savedLeads, fetchSavedLeads, clearLeads } = useLeadStore();
 
@@ -320,6 +321,27 @@ export default function Dashboard() {
       return () => clearTimeout(timer);
     }
   }, [history.length]);
+
+  // Handle indeterminate state for Select All checkbox
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      const allLeadIds = new Set<string>();
+      history.forEach(h => {
+        if (h.leads) {
+          h.leads.forEach((lead: Lead) => {
+            if (lead.id) allLeadIds.add(lead.id);
+          });
+        }
+      });
+      
+      const hasAllLeads = allLeadIds.size > 0;
+      const allSelected = hasAllLeads && allLeadIds.size === selectedLeads.size;
+      const someSelected = selectedLeads.size > 0 && selectedLeads.size < allLeadIds.size;
+      
+      selectAllCheckboxRef.current.checked = allSelected;
+      selectAllCheckboxRef.current.indeterminate = someSelected;
+    }
+  }, [selectedLeads, history]);
 
   // Function to load search results with proper error handling and timeout
   const loadSearchResults = async (domain: string): Promise<{ leads: Lead[]; query: string } | null> => {
@@ -445,20 +467,33 @@ export default function Dashboard() {
     
     const leadsToExport: (Lead & { exportDomain?: string; exportDate?: string })[] = [];
     
+    // Check if any leads are selected
+    if (selectedLeads.size === 0) {
+      alert('Please select at least one lead to export');
+      return;
+    }
+    
     for (const item of history) {
       if (item.leads && item.leads.length > 0) {
         // Fix 4: typed as Lead[]
         const itemLeads = (item.leads as Lead[]).filter((lead: Lead) => 
-          selectedLeads.size === 0 || (lead.id && selectedLeads.has(lead.id))
+          lead.id && selectedLeads.has(lead.id)
         );
         
-        leadsToExport.push(...itemLeads.map((lead: Lead) => ({
-          ...lead,
-          exportDomain: item.domain,
-          exportDate: item.date,
-          source: 'Recent Activity Export'
-        })));
+        if (itemLeads.length > 0) {
+          leadsToExport.push(...itemLeads.map((lead: Lead) => ({
+            ...lead,
+            exportDomain: item.domain,
+            exportDate: item.date,
+            source: 'Recent Activity Export'
+          })));
+        }
       }
+    }
+    
+    if (leadsToExport.length === 0) {
+      alert('No valid leads found for export');
+      return;
     }
     
     const exportData = leadsToExport.map((lead) => ({
@@ -471,6 +506,8 @@ export default function Dashboard() {
       company: (lead.company as string) || '-',
       source: (lead.source as string) || 'Recent Activity Export'
     }));
+
+    console.log(`📤 Exporting ${leadsToExport.length} leads to ${format.toUpperCase()}`);
 
     switch (format) {
       case 'excel':
@@ -584,8 +621,8 @@ export default function Dashboard() {
                   }}
                 >
                   <input
+                    ref={selectAllCheckboxRef}
                     type="checkbox"
-                    checked={selectedLeads.size > 0}
                     onChange={(e) => handleSelectAllLeads(e.target.checked)}
                     style={{ cursor: "pointer" }}
                   />
@@ -702,10 +739,12 @@ export default function Dashboard() {
                       >
                         <input
                           type="checkbox"
+                          className="company-checkbox"
                           checked={(() => {
                             if (!h.leads || h.leads.length === 0) return false;
                             const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
-                            return leadIds.length > 0 && leadIds.every(id => id && selectedLeads.has(id));
+                            const selectedCount = leadIds.filter(id => id && selectedLeads.has(id)).length;
+                            return selectedCount > 0 && selectedCount === leadIds.length;
                           })()}
                           onChange={(e) => {
                             e.stopPropagation();
@@ -715,10 +754,12 @@ export default function Dashboard() {
                             const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
                             
                             if (e.target.checked) {
+                              // Select all leads from this company
                               leadIds.forEach(id => {
                                 if (id) newSelectedLeads.add(id);
                               });
                             } else {
+                              // Deselect all leads from this company
                               leadIds.forEach(id => {
                                 if (id) newSelectedLeads.delete(id);
                               });

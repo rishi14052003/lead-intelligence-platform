@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Users, Mail, Link, Bookmark, Filter, Globe, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
@@ -10,6 +10,7 @@ import Dialog from "../components/Dialog";
 import ExportDropdown from "../components/ExportDropdown";
 import SearchProgress from "../components/feedback/SearchProgress";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
+import type { Lead } from "../services/searchService";
 
 // Sanitize name to remove code/function-like strings
 function sanitizeName(name: string): string {
@@ -116,15 +117,21 @@ export default function Results() {
     } else {
       console.log("📋 Leads already present, not restoring");
     }
-  }, []); // Only run on mount
+  }, [leads.length, history.length, restoreSearchResults]); // Only run on mount
   
-  // Load saved lead signatures on mount to check which are already saved
-  useEffect(() => {
-    refreshSavedSignatures();
-  }, []);
+  // Helper function to generate lead signature
+  const getLeadSignature = (lead: Lead): string => {
+    return [
+      (lead.name || "").toLowerCase().trim(),
+      (lead.role || "").toLowerCase().trim(),
+      (lead.company || "").toLowerCase().trim(),
+      (lead.companyUrl || "").toLowerCase().trim(),
+      (lead.email || "").toLowerCase().trim(),
+    ].join("|");
+  };
 
   // Refresh saved lead signatures after save/unsave
-  const refreshSavedSignatures = async () => {
+  const refreshSavedSignatures = useCallback(async () => {
     try {
       const savedLeads = await getSavedLeads();
       const signatures = new Set<string>();
@@ -139,11 +146,18 @@ export default function Results() {
     } catch (error) {
       console.error("Error refreshing saved signatures:", error);
     }
-  };
+  }, [getLeadSignature]);
+
+  // Load saved lead signatures on mount to check which are already saved
+  useEffect(() => {
+    refreshSavedSignatures();
+  }, [refreshSavedSignatures]);
 
   // Reset to page 1 when filter or leads change
   useEffect(() => {
-    setCurrentPage(1);
+    setTimeout(() => {
+      setCurrentPage(1);
+    }, 0);
   }, [filter, leads.length]);
   
   const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
@@ -197,21 +211,11 @@ export default function Results() {
     ? leads.slice().sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role))
     : leads.filter(l => l.role === filter).sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role));
 
-  const getLeadSignature = (lead: any): string => {
-    return [
-      (lead.name || "").toLowerCase().trim(),
-      (lead.role || "").toLowerCase().trim(),
-      (lead.company || "").toLowerCase().trim(),
-      (lead.companyUrl || "").toLowerCase().trim(),
-      (lead.email || "").toLowerCase().trim(),
-    ].join("|");
-  };
-
-  const isLeadSaved = (lead: any) => {
+  const isLeadSaved = (lead: Lead) => {
     return savedLeadSignatures.has(getLeadSignature(lead));
   };
 
-  const getSavedLeadDbId = (lead: any): string | null => {
+  const getSavedLeadDbId = (lead: Lead): string | null => {
     return savedLeadIdMap.get(getLeadSignature(lead)) || null;
   };
 
@@ -240,6 +244,7 @@ export default function Results() {
       await refreshSavedSignatures();
       // No dialog shown for save - just save silently
     } catch (error) {
+      console.error("Failed to save leads:", error);
       setDialogConfig({
         title: "Error",
         message: "Failed to save leads",
@@ -252,7 +257,7 @@ export default function Results() {
     }
   };
 
-  const handleSaveSingle = async (lead: any) => {
+  const handleSaveSingle = async (lead: Lead) => {
     // Check if lead is already saved
     const isSaved = isLeadSaved(lead);
     const dbId = getSavedLeadDbId(lead);
@@ -271,6 +276,7 @@ export default function Results() {
             await refreshSavedSignatures();
             setDialogOpen(false);
           } catch (error) {
+            console.error("Failed to delete saved lead:", error);
             setDialogConfig({
               title: "Error",
               message: "Failed to delete saved lead",
@@ -289,6 +295,7 @@ export default function Results() {
         await saveLeads([lead]);
         await refreshSavedSignatures();
       } catch (error) {
+        console.error("Failed to save lead:", error);
         setDialogConfig({
           title: "Error",
           message: "Failed to save lead",
