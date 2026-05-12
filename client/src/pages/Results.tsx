@@ -126,7 +126,55 @@ export default function Results() {
   }, [filter, leads.length]);
   
   const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
-  const filtered = filter === "All" ? leads : leads.filter(l => l.role === filter);
+  
+  // Role-based prioritization function
+  const getRolePriority = (role: string): number => {
+    if (!role) return 999;
+    const normalizedRole = role.toLowerCase().trim();
+    
+    // Priority 1: CEO
+    if (normalizedRole.includes('ceo') || normalizedRole === 'chief executive officer') {
+      return 1;
+    }
+    
+    // Priority 2: CTO
+    if (normalizedRole.includes('cto') || normalizedRole === 'chief technology officer') {
+      return 2;
+    }
+    
+    // Priority 3: Other C-level executives
+    if (normalizedRole.includes('chief') || normalizedRole.includes('c-level')) {
+      return 3;
+    }
+    
+    // Priority 4: Founder
+    if (normalizedRole.includes('founder')) {
+      return 4;
+    }
+    
+    // Priority 5: President/VP
+    if (normalizedRole.includes('president') || normalizedRole.includes('vice president')) {
+      return 5;
+    }
+    
+    // Priority 6: Head/Director
+    if (normalizedRole.includes('head') || normalizedRole.includes('director')) {
+      return 6;
+    }
+    
+    // Priority 7: Manager
+    if (normalizedRole.includes('manager')) {
+      return 7;
+    }
+    
+    // Default priority for all other roles
+    return 8;
+  };
+  
+  // Apply role filter and then sort by priority
+  const filtered = filter === "All" 
+    ? leads.slice().sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role))
+    : leads.filter(l => l.role === filter).sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role));
 
   const getLeadSignature = (lead: any): string => {
     return [
