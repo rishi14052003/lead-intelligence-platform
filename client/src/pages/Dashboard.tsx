@@ -4,6 +4,7 @@ import { Users, Bookmark, Search, TrendingUp, Clock, Grid, Trash2 } from "lucide
 import type { LucideIcon } from "lucide-react";
 import { useHistoryStore } from "../store/historyStore";
 import { useLeadStore } from "../store/leadStore";
+import { saveSearchResultsToStorage, getSearchResultsFromStorage, getSearchResultsFromDatabase, getCompanySearchResultsFromDatabase } from "../services/searchResultsService";
 import ExportDropdown from "../components/ExportDropdown";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 
@@ -276,8 +277,9 @@ export default function Dashboard() {
   const [companiesPage, setCompaniesPage] = useState(1);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllCompanies, setShowAllCompanies] = useState(false);
+  const [loadingCompanyData, setLoadingCompanyData] = useState<string | null>(null);
   const { history, loadFromLocalStorage, removeHistoryItem, removeHistoryByDomain } = useHistoryStore();
-  const { leads: savedLeads, fetchSavedLeads } = useLeadStore();
+  const { leads: savedLeads, fetchSavedLeads, clearLeads } = useLeadStore();
 
   useEffect(() => {
     loadFromLocalStorage();
@@ -287,6 +289,14 @@ export default function Dashboard() {
     fetchSavedLeads();
     console.log("📊 Dashboard fetched saved leads:", savedLeads.length);
   }, [fetchSavedLeads, savedLeads.length]);
+
+  // Clear search results when history becomes empty
+  useEffect(() => {
+    if (history.length === 0) {
+      console.log("🗑️ History is empty, clearing search results");
+      clearLeads();
+    }
+  }, [history.length, clearLeads]);
 
   const getDateRange = () => {
     if (performancePeriod === 'week') return getWeekRange();
@@ -523,7 +533,55 @@ export default function Dashboard() {
                 {displayHistory.map((h, i) => (
                   <div
                     key={h.id}
-                    onClick={() => navigate("/results")}
+                    onClick={async () => {
+                      console.log("📅 Recent Activity row clicked:", h.domain);
+                      setLoadingCompanyData(h.domain);
+                      
+                      // Try to get from database first
+                      try {
+                        const dbResults = await getSearchResultsFromDatabase(h.domain);
+                        if (dbResults && dbResults.leads.length > 0) {
+                          console.log("✅ Retrieved results from database:", dbResults.leads.length);
+                          useLeadStore.setState({
+                            leads: dbResults.leads,
+                            searchQuery: dbResults.query,
+                            loading: false,
+                            error: null,
+                          });
+                          saveSearchResultsToStorage(dbResults.query, dbResults.leads);
+                        } else if (h.leads && h.leads.length > 0) {
+                          console.log("⚠️ No database results, using history leads:", h.leads.length);
+                          useLeadStore.setState({
+                            leads: h.leads,
+                            searchQuery: h.domain,
+                            loading: false,
+                            error: null,
+                          });
+                          saveSearchResultsToStorage(h.domain, h.leads);
+                        } else {
+                          console.log("❌ No results found anywhere");
+                          useLeadStore.setState({
+                            leads: [],
+                            searchQuery: h.domain,
+                            loading: false,
+                            error: null,
+                          });
+                        }
+                      } catch (error) {
+                        console.error("❌ Error retrieving from database:", error);
+                        // Fallback to history leads
+                        if (h.leads && h.leads.length > 0) {
+                          useLeadStore.setState({
+                            leads: h.leads,
+                            searchQuery: h.domain,
+                            loading: false,
+                            error: null,
+                          });
+                        }
+                      }
+                      setLoadingCompanyData(null);
+                      navigate("/results");
+                    }}
                     style={{
                       cursor: "pointer",
                       display: "flex",
@@ -654,7 +712,76 @@ export default function Dashboard() {
                 {displayCompanies.map((company, i) => (
                   <div
                     key={`${company.company}-${i}`}
+                    onClick={async () => {
+                      console.log("🏢 Top Companies row clicked:", company.company);
+                      setLoadingCompanyData(company.company);
+                      
+                      // Try to get from database first
+                      try {
+                        console.log("🔍 Retrieving company results from database...");
+                        const dbLeads = await getCompanySearchResultsFromDatabase(company.company);
+                        
+                        if (dbLeads.length > 0) {
+                          console.log("✅ Retrieved company results from database:", dbLeads.length);
+                          useLeadStore.setState({
+                            leads: dbLeads,
+                            searchQuery: company.company,
+                            loading: false,
+                            error: null,
+                          });
+                          saveSearchResultsToStorage(company.company, dbLeads);
+                        } else {
+                          console.log("❌ No database results, checking history leads...");
+                          // Fallback to history items
+                          const companyHistoryItems = history.filter(h => h.domain === company.company);
+                          const allCompanyLeads = companyHistoryItems.flatMap(h => h.leads || []);
+                          
+                          if (allCompanyLeads.length > 0) {
+                            console.log("✅ Using history leads:", allCompanyLeads.length);
+                            useLeadStore.setState({
+                              leads: allCompanyLeads,
+                              searchQuery: company.company,
+                              loading: false,
+                              error: null,
+                            });
+                            saveSearchResultsToStorage(company.company, allCompanyLeads);
+                          } else {
+                            console.log("❌ No results found, showing empty state");
+                            useLeadStore.setState({
+                              leads: [],
+                              searchQuery: company.company,
+                              loading: false,
+                              error: null,
+                            });
+                          }
+                        }
+                      } catch (error) {
+                        console.error("❌ Error retrieving from database:", error);
+                        // Fallback to history leads
+                        const companyHistoryItems = history.filter(h => h.domain === company.company);
+                        const allCompanyLeads = companyHistoryItems.flatMap(h => h.leads || []);
+                        
+                        if (allCompanyLeads.length > 0) {
+                          useLeadStore.setState({
+                            leads: allCompanyLeads,
+                            searchQuery: company.company,
+                            loading: false,
+                            error: null,
+                          });
+                        } else {
+                          useLeadStore.setState({
+                            leads: [],
+                            searchQuery: company.company,
+                            loading: false,
+                            error: "Failed to load company data",
+                          });
+                        }
+                      }
+                      setLoadingCompanyData(null);
+                      navigate("/results");
+                    }}
                     style={{
+                      cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
@@ -699,7 +826,10 @@ export default function Dashboard() {
                     </div>
                     <button
                       className="btn btn-ghost btn-sm btn-icon"
-                      onClick={() => removeHistoryByDomain(company.company)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeHistoryByDomain(company.company);
+                      }}
                       title="Delete this company from activity"
                       style={{
                         minWidth: "36px",

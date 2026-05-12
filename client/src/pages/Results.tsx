@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Search, Users, Mail, Link, Bookmark, Filter, Globe, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
+import { useHistoryStore } from "../store/historyStore";
 import { saveLeads } from "../services/leadService";
 import { deleteLead } from "../services/leadService";
 import { getSavedLeads } from "../services/leadService";
@@ -90,12 +91,32 @@ export default function Results() {
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
   const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
-  
-  // Always restore search results from localStorage on mount
+  const { history } = useHistoryStore();
+
+  // Debug: Log leads data changes
   useEffect(() => {
-    console.log("📋 Restoring search results from localStorage");
-    restoreSearchResults();
-  }, []);
+    console.log("🔍 Leads data updated:", {
+      leadsCount: leads.length,
+      loading,
+      leads: leads.slice(0, 3), // Show first 3 leads for debugging
+    });
+  }, [leads, loading]);
+  
+  // Only restore search results on initial mount if no leads are present
+  useEffect(() => {
+    console.log("📋 Initial mount - checking if leads need to be restored");
+    console.log("📋 Current leads count:", leads.length);
+    console.log("📋 History length:", history.length);
+    
+    if (leads.length === 0 && history.length > 0) {
+      console.log("📋 No leads found but history exists, restoring from localStorage");
+      restoreSearchResults();
+    } else if (leads.length === 0 && history.length === 0) {
+      console.log("📋 No leads and no history, keeping empty");
+    } else {
+      console.log("📋 Leads already present, not restoring");
+    }
+  }, []); // Only run on mount
   
   // Load saved lead signatures on mount to check which are already saved
   useEffect(() => {

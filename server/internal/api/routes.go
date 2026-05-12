@@ -40,6 +40,11 @@ func Routes() *chi.Mux {
 		// Search endpoint
 		r.Post("/search", SearchHandler)
 
+		// Search results endpoints
+		r.Post("/search/results", SaveSearchResultsHandler)
+		r.Get("/search/results/{query}", GetSearchResultsHandler)
+		r.Get("/search/results/company/{company}", GetCompanySearchResultsHandler)
+
 		// History endpoint
 		r.Get("/history", GetHistoryHandler)
 

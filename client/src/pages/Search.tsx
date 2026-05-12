@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { useHistoryStore } from "../store/historyStore";
+import { saveSearchResultsToDatabase } from "../services/searchResultsService";
 import SearchProgress from "../components/feedback/SearchProgress";
 
 const FEATURES = [
@@ -85,11 +86,17 @@ export default function SearchPage() {
         ? `${trimmedCompany}, ${trimmedLocation}`
         : trimmedCompany;
       
+      // Save search results to database (async, don't wait for completion)
+      saveSearchResultsToDatabase(displayQuery, searchResults, trimmedLocation).catch(error => {
+        console.error("Failed to save search results to database:", error);
+      });
+      
       addHistory({
         id: Date.now().toString(),
         domain: displayQuery,
         date: new Date().toLocaleDateString(),
         leadsFound: searchResults.length,
+        leads: searchResults, // Store the actual leads data
       });
       navigate("/results");
     } catch {
