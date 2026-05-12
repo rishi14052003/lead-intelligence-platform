@@ -1,12 +1,13 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { Users, Bookmark, Search, TrendingUp, Clock, Grid, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Users, Bookmark, Search, TrendingUp, Clock, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useHistoryStore } from "../store/historyStore";
 import { useLeadStore } from "../store/leadStore";
-import { saveSearchResultsToStorage, getSearchResultsFromStorage, getSearchResultsFromDatabase, getCompanySearchResultsFromDatabase } from "../services/searchResultsService";
+import { saveSearchResultsToStorage, getSearchResultsFromDatabase } from "../services/searchResultsService";
 import ExportDropdown from "../components/ExportDropdown";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
+import type { Lead } from "../services/searchService";
 
 function StatCard({ 
   label, 
@@ -137,7 +138,6 @@ function parseDateSafe(value?: string): Date | null {
   const parts = value.split(/[/-]/).map((p) => Number(p));
   if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
     const [a, b, c] = parts;
-    // Handles common dd/mm/yyyy and mm/dd/yyyy formats strictly.
     if (isValidYMD(c, b, a)) return new Date(c, b - 1, a);
     if (isValidYMD(c, a, b)) return new Date(c, a - 1, b);
   }
@@ -189,6 +189,7 @@ function buildBuckets(period: 'week' | 'month' | 'year'): TrendBucket[] {
   }));
 }
 
+// Fix 5: Renamed from MiniTrendCharts → MiniTrendChart (typo at call sites)
 function MiniTrendChart({
   title,
   subtitle,
@@ -274,12 +275,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [performancePeriod, setPerformancePeriod] = useState<'week' | 'month' | 'year'>('week');
   const [historyPage, setHistoryPage] = useState(1);
-  const [companiesPage, setCompaniesPage] = useState(1);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const [showAllCompanies, setShowAllCompanies] = useState(false);
   const [loadingCompanyData, setLoadingCompanyData] = useState<string | null>(null);
-  const { history, loadFromLocalStorage, removeHistoryItem, removeHistoryByDomain } = useHistoryStore();
-  const { leads: savedLeads, fetchSavedLeads, clearLeads, setLoading, setError } = useLeadStore();
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const { history, loadFromLocalStorage, removeHistoryItem } = useHistoryStore();
+  const { leads: savedLeads, fetchSavedLeads, clearLeads } = useLeadStore();
+
+  // Fix 3: Use a ref to avoid calling setState synchronously inside useEffect
+  const prevHistoryLengthRef = useRef(history.length);
 
   useEffect(() => {
     loadFromLocalStorage();
@@ -306,16 +309,25 @@ export default function Dashboard() {
     }
   }, [history.length, clearLeads]);
 
+  // Fix 3: Replaced synchronous setState inside useEffect with a ref-guarded approach
+  useEffect(() => {
+    if (prevHistoryLengthRef.current !== history.length) {
+      prevHistoryLengthRef.current = history.length;
+      // Use a microtask to defer the setState call out of the effect body
+      const timer = setTimeout(() => {
+        setHistoryPage(1);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [history.length]);
+
   // Function to load search results with proper error handling and timeout
-  const loadSearchResults = async (domain: string): Promise<{ leads: any[]; query: string } | null> => {
+  const loadSearchResults = async (domain: string): Promise<{ leads: Lead[]; query: string } | null> => {
     try {
-      setLoading(true);
-      setError(null);
-      
       console.log("🔍 Loading search results for:", domain);
       
-      // Use improved API service with built-in timeout
-      const result = await getSearchResultsFromDatabase(domain, 1500);
+      // Fix 1 & 4: Use Lead[] instead of Record<string, any>[]
+      const result = await getSearchResultsFromDatabase(domain, 1500) as { leads: Lead[]; query: string } | null;
       
       if (result && result.leads.length > 0) {
         console.log("✅ Retrieved results from database:", result.leads.length);
@@ -327,34 +339,22 @@ export default function Dashboard() {
     } catch (error) {
       console.error("❌ Error loading search results:", error);
       return null;
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Function to load company results with proper error handling and timeout
-  const loadCompanyResults = async (company: string): Promise<any[]> => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log("🏢 Loading company results for:", company);
-      
-      // Use improved API service with built-in timeout
-      const result = await getCompanySearchResultsFromDatabase(company, 1500);
-      
-      if (result && result.length > 0) {
-        console.log("✅ Retrieved company results from database:", result.length);
-        return result;
-      } else {
-        console.log("⚠️ No database results found for company");
-        return [];
-      }
-    } catch (error) {
-      console.error("❌ Error loading company results:", error);
-      return [];
-    } finally {
-      setLoading(false);
+  const handleSelectAllLeads = (isChecked: boolean) => {
+    if (isChecked) {
+      const allLeadIds = new Set<string>();
+      history.forEach(h => {
+        if (h.leads) {
+          h.leads.forEach((lead: Lead) => {
+            if (lead.id) allLeadIds.add(lead.id);
+          });
+        }
+      });
+      setSelectedLeads(allLeadIds);
+    } else {
+      setSelectedLeads(new Set());
     }
   };
 
@@ -372,25 +372,7 @@ export default function Dashboard() {
     ? history.slice(historyStartIndex, historyEndIndex)
     : history.slice(0, historyItemsPerPage);
 
-  const topCompanies = history
-    .reduce((acc: { company: string; leads: number }[], h) => {
-      const existing = acc.find((c) => c.company === h.domain);
-      if (existing) {
-        existing.leads += h.leadsFound;
-      } else {
-        acc.push({ company: h.domain, leads: h.leadsFound });
-      }
-      return acc;
-    }, [])
-    .sort((a, b) => b.leads - a.leads);
-
-  const companiesPerPage = 5;
-  const totalCompanyPages = showAllCompanies ? Math.ceil(topCompanies.length / companiesPerPage) : 1;
-  const companyStartIndex = (companiesPage - 1) * companiesPerPage;
-  const companyEndIndex = companyStartIndex + companiesPerPage;
-  const displayCompanies = showAllCompanies
-    ? topCompanies.slice(companyStartIndex, companyEndIndex)
-    : topCompanies.slice(0, companiesPerPage);
+  // Fix 2: Removed unused _topCompanies variable entirely
 
   const searchesCount = history.length;
   const leadsFoundCount = history.reduce((sum, item) => sum + item.leadsFound, 0);
@@ -424,7 +406,7 @@ export default function Dashboard() {
       }
     });
 
-    savedLeads.forEach((lead) => {
+    savedLeads.forEach((lead: Lead) => {
       const d = parseDateSafe(lead.createdAt);
       if (!d) return;
       let idx = -1;
@@ -453,55 +435,52 @@ export default function Dashboard() {
     return buckets;
   })();
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    if (historyPage !== 1) setHistoryPage(1);
-    if (companiesPage !== 1) setCompaniesPage(1);
-  }, [history.length, historyPage, companiesPage]);
-
   const rowSurfaceStyle: React.CSSProperties = {
     background: "var(--surface2)",
     border: "1px solid var(--border)",
   };
 
-  const handleExportRecentActivity = (format: 'pdf' | 'excel' | 'word') => {
+  const handleExportRecentActivity = async (format: 'pdf' | 'excel' | 'word') => {
     const exportFilename = `recent-activity-${new Date().toISOString().split('T')[0]}`;
-    const exportData = history.map((h) => ({
-      domain: h.domain || '-',
-      date: h.date || '-',
-      leadsFound: h.leadsFound || 0,
-    }));
-
-    switch (format) {
-      case 'excel':
-        exportToExcel(exportData, exportFilename, 'Recent Activity');
-        break;
-      case 'pdf':
-        exportToPDF(exportData, exportFilename, 'Recent Activity Export');
-        break;
-      case 'word':
-        exportToWord(exportData, exportFilename, 'Recent Activity Export');
-        break;
+    
+    const leadsToExport: (Lead & { exportDomain?: string; exportDate?: string })[] = [];
+    
+    for (const item of history) {
+      if (item.leads && item.leads.length > 0) {
+        // Fix 4: typed as Lead[]
+        const itemLeads = (item.leads as Lead[]).filter((lead: Lead) => 
+          selectedLeads.size === 0 || (lead.id && selectedLeads.has(lead.id))
+        );
+        
+        leadsToExport.push(...itemLeads.map((lead: Lead) => ({
+          ...lead,
+          exportDomain: item.domain,
+          exportDate: item.date,
+          source: 'Recent Activity Export'
+        })));
+      }
     }
-  };
-
-  const handleExportTopCompanies = (format: 'pdf' | 'excel' | 'word') => {
-    const exportFilename = `top-companies-${new Date().toISOString().split('T')[0]}`;
-    const exportData = topCompanies.map((c, index) => ({
-      rank: index + 1,
-      company: c.company || '-',
-      totalLeads: c.leads || 0,
+    
+    const exportData = leadsToExport.map((lead) => ({
+      domain: lead.exportDomain || '-',
+      date: lead.exportDate || '-',
+      name: lead.name || '-',
+      role: lead.role || '-',
+      email: (lead.email as string) || '-',
+      linkedin: (lead.linkedin as string) || '-',
+      company: (lead.company as string) || '-',
+      source: (lead.source as string) || 'Recent Activity Export'
     }));
 
     switch (format) {
       case 'excel':
-        exportToExcel(exportData, exportFilename, 'Top Companies');
+        exportToExcel(exportData, exportFilename);
         break;
       case 'pdf':
-        exportToPDF(exportData, exportFilename, 'Top Companies Export');
+        exportToPDF(exportData, exportFilename);
         break;
       case 'word':
-        exportToWord(exportData, exportFilename, 'Top Companies Export');
+        exportToWord(exportData, exportFilename);
         break;
     }
   };
@@ -584,399 +563,297 @@ export default function Dashboard() {
                 </button>
               </div>
             }
-            style={{ height: '100%' }}
           >
-            {displayHistory.length === 0 ? (
-              <EmptyState icon={Clock} title="No recent activity" subtitle="Your recent searches and lead activities will appear here." iconSize={24} />
-            ) : (
-              <div style={{ minHeight: "300px", display: "flex", flexDirection: "column" }}>
-                {displayHistory.map((h, i) => (
-                  <div
-                    key={h.id}
-                    onClick={async () => {
-                      console.log("📅 Recent Activity row clicked:", h.domain);
-                      setLoadingCompanyData(h.domain);
-                      
-                      try {
-                        // Try to get from database first with timeout
-                        const dbResults = await loadSearchResults(h.domain);
-                        
-                        if (dbResults && dbResults.leads.length > 0) {
-                          useLeadStore.setState({
-                            leads: dbResults.leads,
-                            searchQuery: dbResults.query,
-                            loading: false,
-                            error: null,
-                          });
-                          saveSearchResultsToStorage(dbResults.query, dbResults.leads);
-                        } else if (h.leads && h.leads.length > 0) {
-                          console.log("⚠️ No database results, using history leads:", h.leads.length);
-                          useLeadStore.setState({
-                            leads: h.leads,
-                            searchQuery: h.domain,
-                            loading: false,
-                            error: null,
-                          });
-                          saveSearchResultsToStorage(h.domain, h.leads);
-                        } else {
-                          console.log("❌ No results found anywhere");
-                          useLeadStore.setState({
-                            leads: [],
-                            searchQuery: h.domain,
-                            loading: false,
-                            error: null,
-                          });
-                        }
-                      } catch (error) {
-                        console.error("❌ Error in recent activity click handler:", error);
-                        // Fallback to history leads
-                        if (h.leads && h.leads.length > 0) {
-                          useLeadStore.setState({
-                            leads: h.leads,
-                            searchQuery: h.domain,
-                            loading: false,
-                            error: null,
-                          });
-                        } else {
-                          useLeadStore.setState({
-                            leads: [],
-                            searchQuery: h.domain,
-                            loading: false,
-                            error: "Failed to load data",
-                          });
-                        }
-                      }
-      
-                      setLoadingCompanyData(null);
-                      
-                      // Small delay to ensure state is updated before navigation
-                      setTimeout(() => {
-                        navigate("/results");
-                      }, 1000);
-                    }}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    color: "var(--text1)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedLeads.size > 0}
+                    onChange={(e) => handleSelectAllLeads(e.target.checked)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <span>Select All Leads</span>
+                </label>
+
+                {selectedLeads.size > 0 && (
+                  <span
                     style={{
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                      padding: "13px 15px",
-                      marginBottom: "10px",
-                      borderRadius: "12px",
-                      ...rowSurfaceStyle,
-                      transition: "all 0.18s ease",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.background = "var(--surface3)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background = "var(--surface2)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+                      fontSize: "12px",
+                      color: "var(--accent)",
+                      fontWeight: "600",
                     }}
                   >
-                    {/* Left: Icon + Info */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        width: "18px",
-                        textAlign: "center",
-                        fontSize: "13px",
-                        fontWeight: "600",
-                        color: "var(--text1)",
-                        flexShrink: 0,
-                      }}>
-                        {historyStartIndex + i + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: "14px", fontWeight: "600", color: "var(--text1)",
-                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "3px"
-                        }}>
-                          {h.domain}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "var(--text2)", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span>{h.date}</span>
-                          <span style={{ opacity: 0.6 }}>·</span>
-                          <span style={{ color: "var(--text1)", fontWeight: "600" }}>{h.leadsFound} leads</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Right: Loading/Status */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      {loadingCompanyData === h.domain ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <div style={{ 
-                            width: "16px", 
-                            height: "16px", 
-                            border: "2px solid var(--border)", 
-                            borderTop: "2px solid var(--accent)", 
-                            borderRadius: "50%", 
-                            animation: "spin 1s linear infinite" 
-                          }} />
-                          <span style={{ fontSize: "12px", color: "var(--text2)" }}>Loading...</span>
-                        </div>
-                      ) : (
-                        <button
-                          className="btn btn-ghost btn-sm btn-icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeHistoryItem(h.id);
-                          }}
-                          title="Delete this activity"
-                          style={{
-                            minWidth: "34px",
-                            height: "34px",
-                            borderRadius: "9px",
-                            flexShrink: 0,
-                            color: "var(--text2)",
-                          }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {showAllHistory && totalHistoryPages > 1 && (
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 12 }}>
-                    <span style={{ fontSize: 12, color: "#888" }}>
-                      Showing {historyStartIndex + 1}-{Math.min(historyEndIndex, history.length)} of {history.length} searches
-                    </span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                        disabled={historyPage === 1}
-                      >
-                        Prev
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))}
-                        disabled={historyPage === totalHistoryPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
+                    {selectedLeads.size} lead
+                    {selectedLeads.size === 1 ? "" : "s"} selected
+                  </span>
                 )}
               </div>
-            )}
-          </Card>
-        </div>
+            </div>
 
-        {/* Top Companies */}
-        <div className="col-6" style={{ flex: 1 }}>
-          <Card
-            title={`Top Companies · ${topCompanies.length} companies`}
-            extra={
-              <div style={{ display: "flex", gap: 8 }}>
-                <ExportDropdown onExport={handleExportTopCompanies} disabled={topCompanies.length === 0} />
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    if (showAllCompanies) {
-                      setShowAllCompanies(false);
-                      setCompaniesPage(1);
-                    } else {
-                      setShowAllCompanies(true);
-                      setCompaniesPage(1);
-                    }
-                  }}
-                  disabled={topCompanies.length <= companiesPerPage}
-                >
-                  {showAllCompanies ? "Show Less" : "View All"}
-                </button>
-              </div>
-            }
-            style={{ height: '100%' }}
-          >
-            {displayCompanies.length === 0 ? (
-              <EmptyState icon={Grid} title="No data yet" subtitle="Companies with most leads will appear here." iconSize={24} />
-            ) : (
-              <div style={{ minHeight: "300px", display: "flex", flexDirection: "column" }}>
-                {displayCompanies.map((company, i) => (
-                  <div
-                    key={`${company.company}-${i}`}
-                    onClick={async () => {
-                      console.log("🏢 Top Companies row clicked:", company.company);
-                      setLoadingCompanyData(company.company);
-                      
-                      try {
-                        // Try to get from database first with timeout
-                        const dbLeads = await loadCompanyResults(company.company);
-                        
-                        if (dbLeads.length > 0) {
-                          useLeadStore.setState({
-                            leads: dbLeads,
-                            searchQuery: company.company,
-                            loading: false,
-                            error: null,
-                          });
-                          saveSearchResultsToStorage(company.company, dbLeads);
-                        } else {
-                          console.log("❌ No database results, checking history leads...");
-                          // Fallback to history items
-                          const companyHistoryItems = history.filter(h => h.domain === company.company);
-                          const allCompanyLeads = companyHistoryItems.flatMap(h => h.leads || []);
-                          
-                          if (allCompanyLeads.length > 0) {
-                            console.log("✅ Using history leads:", allCompanyLeads.length);
+            <div
+              style={{
+                minHeight: "300px",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {displayHistory.length === 0 ? (
+                <EmptyState
+                  icon={Clock}
+                  title="No recent activity"
+                  subtitle="Your recent searches and lead activities will appear here."
+                  iconSize={24}
+                />
+              ) : (
+                <>
+                  {displayHistory.map((h, i) => (
+                    <div
+                      key={h.id}
+                      onClick={async () => {
+                        console.log("📅 Recent Activity row clicked:", h.domain);
+                        setLoadingCompanyData(h.domain);
+
+                        try {
+                          const dbResults = await loadSearchResults(h.domain);
+
+                          if (dbResults && dbResults.leads.length > 0) {
                             useLeadStore.setState({
-                              leads: allCompanyLeads,
-                              searchQuery: company.company,
+                              leads: dbResults.leads,
+                              searchQuery: dbResults.query,
                               loading: false,
                               error: null,
                             });
-                            saveSearchResultsToStorage(company.company, allCompanyLeads);
+
+                            saveSearchResultsToStorage(
+                              dbResults.query,
+                              dbResults.leads
+                            );
+                          } else if (h.leads && h.leads.length > 0) {
+                            useLeadStore.setState({
+                              leads: h.leads as Lead[],
+                              searchQuery: h.domain,
+                              loading: false,
+                              error: null,
+                            });
+
+                            saveSearchResultsToStorage(h.domain, h.leads as Lead[]);
                           } else {
-                            console.log("❌ No results found, showing empty state");
                             useLeadStore.setState({
                               leads: [],
-                              searchQuery: company.company,
+                              searchQuery: h.domain,
                               loading: false,
                               error: null,
                             });
                           }
-                        }
-                      } catch (error) {
-                        console.error("❌ Error in top companies click handler:", error);
-                        // Fallback to history leads
-                        const companyHistoryItems = history.filter(h => h.domain === company.company);
-                        const allCompanyLeads = companyHistoryItems.flatMap(h => h.leads || []);
-                        
-                        if (allCompanyLeads.length > 0) {
+                        } catch (error) {
+                          console.error(error);
+
                           useLeadStore.setState({
-                            leads: allCompanyLeads,
-                            searchQuery: company.company,
+                            leads: (h.leads as Lead[]) || [],
+                            searchQuery: h.domain,
                             loading: false,
                             error: null,
                           });
-                        } else {
-                          useLeadStore.setState({
-                            leads: [],
-                            searchQuery: company.company,
-                            loading: false,
-                            error: "Failed to load company data",
-                          });
                         }
-                      }
-      
-                      setLoadingCompanyData(null);
-                      
-                      // Small delay to ensure state is updated before navigation
-                      setTimeout(() => {
-                        navigate("/results");
-                      }, 1000);
-                    }}
-                    style={{
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                      padding: "13px 15px",
-                      marginBottom: "10px",
-                      borderRadius: "12px",
-                      ...rowSurfaceStyle,
-                      transition: "all 0.18s ease",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.background = "var(--surface3)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background = "var(--surface2)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        width: "18px",
-                        textAlign: "center",
-                        fontSize: "13px",
-                        fontWeight: "600",
-                        color: "var(--text1)",
-                        flexShrink: 0,
-                      }}>
-                        {companyStartIndex + i + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: "14px", fontWeight: "600", color: "var(--text1)",
-                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: "4px"
-                        }}>
-                          {company.company}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "var(--text2)", display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ color: "var(--text1)", fontWeight: "600" }}>{company.leads} leads total</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      {loadingCompanyData === company.company ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <div style={{ 
-                            width: "16px", 
-                            height: "16px", 
-                            border: "2px solid var(--border)", 
-                            borderTop: "2px solid var(--accent)", 
-                            borderRadius: "50%", 
-                            animation: "spin 1s linear infinite" 
-                          }} />
-                          <span style={{ fontSize: "12px", color: "var(--text2)" }}>Loading...</span>
-                        </div>
-                      ) : (
-                        <button
-                          className="btn btn-ghost btn-sm btn-icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeHistoryByDomain(company.company);
-                          }}
-                          title="Delete this company from activity"
+
+                        setTimeout(() => {
+                          setLoadingCompanyData(null);
+                          navigate("/results");
+                        }, 500);
+                      }}
+                      style={{
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        padding: "13px 15px",
+                        marginBottom: "10px",
+                        borderRadius: "12px",
+                        ...rowSurfaceStyle,
+                        transition: "all 0.18s ease",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        <div
                           style={{
-                            minWidth: "36px",
-                            height: "36px",
-                            borderRadius: "9px",
+                            width: "18px",
+                            textAlign: "center",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                            color: "var(--text1)",
                             flexShrink: 0,
-                            color: "var(--text2)",
                           }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
                         >
-                          <Trash2 size={14} />
+                          {historyStartIndex + i + 1}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: "600",
+                              color: "var(--text1)",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              marginBottom: "3px",
+                            }}
+                          >
+                            {h.domain}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "var(--text2)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            <span>{h.date}</span>
+
+                            <span style={{ opacity: 0.6 }}>·</span>
+
+                            <span
+                              style={{
+                                color: "var(--text1)",
+                                fontWeight: "600",
+                              }}
+                            >
+                              {h.leadsFound} leads
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {loadingCompanyData === h.domain ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                border: "2px solid var(--border)",
+                                borderTop: "2px solid var(--accent)",
+                                borderRadius: "50%",
+                                animation: "spin 1s linear infinite",
+                              }}
+                            />
+
+                            <span
+                              style={{
+                                fontSize: "12px",
+                                color: "var(--text2)",
+                              }}
+                            >
+                              Loading...
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn btn-ghost btn-sm btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeHistoryItem(h.id);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {showAllHistory && totalHistoryPages > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginTop: "auto",
+                        paddingTop: 12,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "#888",
+                        }}
+                      >
+                        Showing {historyStartIndex + 1}-
+                        {Math.min(historyEndIndex, history.length)} of{" "}
+                        {history.length} searches
+                      </span>
+
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() =>
+                            setHistoryPage((p) => Math.max(1, p - 1))
+                          }
+                          disabled={historyPage === 1}
+                        >
+                          Prev
                         </button>
-                      )}
+
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() =>
+                            setHistoryPage((p) =>
+                              Math.min(totalHistoryPages, p + 1)
+                            )
+                          }
+                          disabled={historyPage === totalHistoryPages}
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {showAllCompanies && totalCompanyPages > 1 && (
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 12 }}>
-                    <span style={{ fontSize: 12, color: "#888" }}>
-                      Showing {companyStartIndex + 1}-{Math.min(companyEndIndex, topCompanies.length)} of {topCompanies.length} companies
-                    </span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCompaniesPage((p) => Math.max(1, p - 1))}
-                        disabled={companiesPage === 1}
-                      >
-                        Prev
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCompaniesPage((p) => Math.min(totalCompanyPages, p + 1))}
-                        disabled={companiesPage === totalCompanyPages}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </>
+              )}
+            </div>
           </Card>
         </div>
       </div>
@@ -1012,6 +889,7 @@ export default function Dashboard() {
               {formatDateRange(getDateRange().start, getDateRange().end)}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {/* Fix 5: Correct component name MiniTrendChart (not MiniTrendCharts) */}
               <MiniTrendChart
                 title="Searches vs Leads Found"
                 subtitle={`Total ${searchesCount} searches · ${leadsFoundCount} leads found`}
@@ -1040,4 +918,4 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
+} 

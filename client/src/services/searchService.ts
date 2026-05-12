@@ -9,6 +9,7 @@ export interface Lead {
   score?: number;
   company?: string;
   companyUrl?: string;
+  source?: string;
   createdAt?: string;
 }
 
