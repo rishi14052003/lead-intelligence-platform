@@ -55,14 +55,18 @@ export default function Login() {
     setLoading(true);
 
     try {
+      console.log("Attempting login with:", { email: formData.email });
       const response = await api.post("/auth/login", {
         email: formData.email,
         password: formData.password,
       });
 
+      console.log("Login response:", response.data);
       const { token, user } = response.data;
+      console.log("Setting token and user:", { token: !!token, user });
       setToken(token);
       setUser(user);
+      console.log("After setting auth state, navigating to dashboard");
       navigate("/dashboard");
     } catch (error: any) {
       const errorMessage =

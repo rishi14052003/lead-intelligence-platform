@@ -35,14 +35,15 @@ export const useAuthStore = create<AuthStore>()(
       error: null,
 
       setUser: (user: User) =>
-        set(() => ({
+        set((state) => ({
           user,
-          isAuthenticated: !!user,
+          isAuthenticated: !!user || !!state.token,
         })),
 
       setToken: (token: string) =>
-        set(() => ({
+        set((state) => ({
           token,
+          isAuthenticated: !!token || !!state.user,
         })),
 
       setLoading: (loading: boolean) =>
@@ -73,8 +74,13 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Recompute isAuthenticated from persisted data
+          state.isAuthenticated = !!(state.user && state.token);
+        }
+      },
     }
   )
 );

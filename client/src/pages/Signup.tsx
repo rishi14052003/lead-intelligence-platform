@@ -111,6 +111,11 @@ export default function Signup() {
     setErrors((prev) => ({ ...prev, general: "" }));
 
     try {
+      console.log("Attempting signup with:", { 
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email
+      });
       const response = await api.post("/auth/signup", {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
@@ -118,9 +123,12 @@ export default function Signup() {
         password: formData.password,
       });
 
+      console.log("Signup response:", response.data);
       const { token, user } = response.data;
+      console.log("Setting token and user:", { token: !!token, user });
       setToken(token);
       setUser(user);
+      console.log("After setting auth state, navigating to dashboard");
       navigate("/dashboard");
     } catch (error: any) {
       const errorMessage: string =

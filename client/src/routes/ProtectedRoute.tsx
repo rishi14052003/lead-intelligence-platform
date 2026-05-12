@@ -6,11 +6,15 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user, token } = useAuthStore();
+
+  console.log("ProtectedRoute check:", { isAuthenticated, hasUser: !!user, hasToken: !!token });
 
   if (!isAuthenticated) {
+    console.log("Not authenticated, redirecting to login");
     return <Navigate to="/login" replace />;
   }
 
+  console.log("Authenticated, rendering children");
   return <>{children}</>;
 }
