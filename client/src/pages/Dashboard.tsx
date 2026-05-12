@@ -700,6 +700,41 @@ export default function Dashboard() {
                           minWidth: 0,
                         }}
                       >
+                        <input
+                          type="checkbox"
+                          checked={(() => {
+                            if (!h.leads || h.leads.length === 0) return false;
+                            const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
+                            return leadIds.length > 0 && leadIds.every(id => id && selectedLeads.has(id));
+                          })()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            if (!h.leads || h.leads.length === 0) return;
+                            
+                            const newSelectedLeads = new Set(selectedLeads);
+                            const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
+                            
+                            if (e.target.checked) {
+                              leadIds.forEach(id => {
+                                if (id) newSelectedLeads.add(id);
+                              });
+                            } else {
+                              leadIds.forEach(id => {
+                                if (id) newSelectedLeads.delete(id);
+                              });
+                            }
+                            
+                            setSelectedLeads(newSelectedLeads);
+                          }}
+                          style={{
+                            cursor: "pointer",
+                            flexShrink: 0,
+                            width: "16px",
+                            height: "16px",
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        
                         <div
                           style={{
                             width: "18px",
