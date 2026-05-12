@@ -189,7 +189,6 @@ function buildBuckets(period: 'week' | 'month' | 'year'): TrendBucket[] {
   }));
 }
 
-// Fix 5: Renamed from MiniTrendCharts → MiniTrendChart (typo at call sites)
 function MiniTrendChart({
   title,
   subtitle,
@@ -277,12 +276,15 @@ export default function Dashboard() {
   const [historyPage, setHistoryPage] = useState(1);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [loadingCompanyData, setLoadingCompanyData] = useState<string | null>(null);
-  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
-  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+
+  // Export modal state
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel' | 'word' | null>(null);
+  const [selectedCompanies, setSelectedCompanies] = useState<Set<string>>(new Set());
+
   const { history, loadFromLocalStorage, removeHistoryItem } = useHistoryStore();
   const { leads: savedLeads, fetchSavedLeads, clearLeads } = useLeadStore();
 
-  // Fix 3: Use a ref to avoid calling setState synchronously inside useEffect
   const prevHistoryLengthRef = useRef(history.length);
 
   useEffect(() => {
@@ -298,11 +300,9 @@ export default function Dashboard() {
         console.error("❌ Failed to fetch saved leads:", error);
       }
     };
-    
     loadLeads();
   }, [fetchSavedLeads]);
 
-  // Clear search results when history becomes empty
   useEffect(() => {
     if (history.length === 0) {
       console.log("🗑️ History is empty, clearing search results");
@@ -310,11 +310,9 @@ export default function Dashboard() {
     }
   }, [history.length, clearLeads]);
 
-  // Fix 3: Replaced synchronous setState inside useEffect with a ref-guarded approach
   useEffect(() => {
     if (prevHistoryLengthRef.current !== history.length) {
       prevHistoryLengthRef.current = history.length;
-      // Use a microtask to defer the setState call out of the effect body
       const timer = setTimeout(() => {
         setHistoryPage(1);
       }, 0);
@@ -322,35 +320,10 @@ export default function Dashboard() {
     }
   }, [history.length]);
 
-  // Handle indeterminate state for Select All checkbox
-  useEffect(() => {
-    if (selectAllCheckboxRef.current) {
-      const allLeadIds = new Set<string>();
-      history.forEach(h => {
-        if (h.leads) {
-          h.leads.forEach((lead: Lead) => {
-            if (lead.id) allLeadIds.add(lead.id);
-          });
-        }
-      });
-      
-      const hasAllLeads = allLeadIds.size > 0;
-      const allSelected = hasAllLeads && allLeadIds.size === selectedLeads.size;
-      const someSelected = selectedLeads.size > 0 && selectedLeads.size < allLeadIds.size;
-      
-      selectAllCheckboxRef.current.checked = allSelected;
-      selectAllCheckboxRef.current.indeterminate = someSelected;
-    }
-  }, [selectedLeads, history]);
-
-  // Function to load search results with proper error handling and timeout
   const loadSearchResults = async (domain: string): Promise<{ leads: Lead[]; query: string } | null> => {
     try {
       console.log("🔍 Loading search results for:", domain);
-      
-      // Fix 1 & 4: Use Lead[] instead of Record<string, any>[]
       const result = await getSearchResultsFromDatabase(domain, 1500) as { leads: Lead[]; query: string } | null;
-      
       if (result && result.leads.length > 0) {
         console.log("✅ Retrieved results from database:", result.leads.length);
         return result;
@@ -361,22 +334,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error("❌ Error loading search results:", error);
       return null;
-    }
-  };
-
-  const handleSelectAllLeads = (isChecked: boolean) => {
-    if (isChecked) {
-      const allLeadIds = new Set<string>();
-      history.forEach(h => {
-        if (h.leads) {
-          h.leads.forEach((lead: Lead) => {
-            if (lead.id) allLeadIds.add(lead.id);
-          });
-        }
-      });
-      setSelectedLeads(allLeadIds);
-    } else {
-      setSelectedLeads(new Set());
     }
   };
 
@@ -393,8 +350,6 @@ export default function Dashboard() {
   const displayHistory = showAllHistory
     ? history.slice(historyStartIndex, historyEndIndex)
     : history.slice(0, historyItemsPerPage);
-
-  // Fix 2: Removed unused _topCompanies variable entirely
 
   const searchesCount = history.length;
   const leadsFoundCount = history.reduce((sum, item) => sum + item.leadsFound, 0);
@@ -462,40 +417,42 @@ export default function Dashboard() {
     border: "1px solid var(--border)",
   };
 
-  const handleExportRecentActivity = async (format: 'pdf' | 'excel' | 'word') => {
-    const exportFilename = `recent-activity-${new Date().toISOString().split('T')[0]}`;
-    
-    const leadsToExport: (Lead & { exportDomain?: string; exportDate?: string })[] = [];
-    
-    // Check if any leads are selected
-    if (selectedLeads.size === 0) {
-      alert('Please select at least one lead to export');
+  // Opens the company-picker modal; actual export happens in handleConfirmExport
+  const handleExportRecentActivity = (format: 'pdf' | 'excel' | 'word') => {
+    if (history.length === 0) return;
+    setExportFormat(format);
+    setSelectedCompanies(new Set());
+    setExportModalOpen(true);
+  };
+
+  // Called when user clicks Export inside the modal
+  const handleConfirmExport = () => {
+    if (!exportFormat || selectedCompanies.size === 0) {
+      alert('Please select at least one company to export');
       return;
     }
-    
+
+    const leadsToExport: (Lead & { exportDomain?: string; exportDate?: string })[] = [];
+
     for (const item of history) {
-      if (item.leads && item.leads.length > 0) {
-        // Fix 4: typed as Lead[]
-        const itemLeads = (item.leads as Lead[]).filter((lead: Lead) => 
-          lead.id && selectedLeads.has(lead.id)
-        );
-        
-        if (itemLeads.length > 0) {
-          leadsToExport.push(...itemLeads.map((lead: Lead) => ({
+      if (selectedCompanies.has(item.id) && item.leads && item.leads.length > 0) {
+        const itemLeads = item.leads as Lead[];
+        leadsToExport.push(
+          ...itemLeads.map((lead) => ({
             ...lead,
             exportDomain: item.domain,
             exportDate: item.date,
-            source: 'Recent Activity Export'
-          })));
-        }
+            source: 'Recent Activity Export',
+          }))
+        );
       }
     }
-    
+
     if (leadsToExport.length === 0) {
-      alert('No valid leads found for export');
+      alert('No leads found for the selected companies');
       return;
     }
-    
+
     const exportData = leadsToExport.map((lead) => ({
       domain: lead.exportDomain || '-',
       date: lead.exportDate || '-',
@@ -504,22 +461,17 @@ export default function Dashboard() {
       email: (lead.email as string) || '-',
       linkedin: (lead.linkedin as string) || '-',
       company: (lead.company as string) || '-',
-      source: (lead.source as string) || 'Recent Activity Export'
+      source: (lead.source as string) || 'Recent Activity Export',
     }));
 
-    console.log(`📤 Exporting ${leadsToExport.length} leads to ${format.toUpperCase()}`);
+    const filename = `recent-activity-${new Date().toISOString().split('T')[0]}`;
+    console.log(`📤 Exporting ${leadsToExport.length} leads to ${exportFormat.toUpperCase()}`);
 
-    switch (format) {
-      case 'excel':
-        exportToExcel(exportData, exportFilename);
-        break;
-      case 'pdf':
-        exportToPDF(exportData, exportFilename);
-        break;
-      case 'word':
-        exportToWord(exportData, exportFilename);
-        break;
-    }
+    if (exportFormat === 'excel') exportToExcel(exportData, filename);
+    if (exportFormat === 'pdf') exportToPDF(exportData, filename);
+    if (exportFormat === 'word') exportToWord(exportData, filename);
+
+    setExportModalOpen(false);
   };
 
   return (
@@ -540,10 +492,10 @@ export default function Dashboard() {
 
       {/* Quick Actions */}
       <div className="stats-grid stats-3" style={{ marginBottom: 14 }}>
-        <StatCard 
-          label="New Search" 
-          value="Start" 
-          icon={Search} 
+        <StatCard
+          label="New Search"
+          value="Start"
+          icon={Search}
           iconVariant="violet"
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
@@ -551,10 +503,10 @@ export default function Dashboard() {
           onClick={() => { navigate("/search"); }}
           style={{ cursor: "pointer" }}
         />
-        <StatCard 
-          label="View Saved" 
-          value="Manage" 
-          icon={Bookmark} 
+        <StatCard
+          label="View Saved"
+          value="Manage"
+          icon={Bookmark}
           iconVariant="violet"
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
@@ -562,10 +514,10 @@ export default function Dashboard() {
           onClick={() => { navigate("/saved"); }}
           style={{ cursor: "pointer" }}
         />
-        <StatCard 
-          label="Recent Activity" 
-          value="View All" 
-          icon={Clock} 
+        <StatCard
+          label="Recent Activity"
+          value="View All"
+          icon={Clock}
           iconVariant="violet"
           labelClassName="stat-action-label"
           valueClassName="stat-action-value"
@@ -603,49 +555,6 @@ export default function Dashboard() {
           >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "12px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    color: "var(--text1)",
-                  }}
-                >
-                  <input
-                    ref={selectAllCheckboxRef}
-                    type="checkbox"
-                    onChange={(e) => handleSelectAllLeads(e.target.checked)}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span>Select All Leads</span>
-                </label>
-
-                {selectedLeads.size > 0 && (
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      color: "var(--accent)",
-                      fontWeight: "600",
-                    }}
-                  >
-                    {selectedLeads.size} lead
-                    {selectedLeads.size === 1 ? "" : "s"} selected
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
                 minHeight: "300px",
                 display: "flex",
                 flexDirection: "column",
@@ -677,11 +586,7 @@ export default function Dashboard() {
                               loading: false,
                               error: null,
                             });
-
-                            saveSearchResultsToStorage(
-                              dbResults.query,
-                              dbResults.leads
-                            );
+                            saveSearchResultsToStorage(dbResults.query, dbResults.leads);
                           } else if (h.leads && h.leads.length > 0) {
                             useLeadStore.setState({
                               leads: h.leads as Lead[],
@@ -689,7 +594,6 @@ export default function Dashboard() {
                               loading: false,
                               error: null,
                             });
-
                             saveSearchResultsToStorage(h.domain, h.leads as Lead[]);
                           } else {
                             useLeadStore.setState({
@@ -701,7 +605,6 @@ export default function Dashboard() {
                           }
                         } catch (error) {
                           console.error(error);
-
                           useLeadStore.setState({
                             leads: (h.leads as Lead[]) || [],
                             searchQuery: h.domain,
@@ -737,45 +640,7 @@ export default function Dashboard() {
                           minWidth: 0,
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          className="company-checkbox"
-                          checked={(() => {
-                            if (!h.leads || h.leads.length === 0) return false;
-                            const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
-                            const selectedCount = leadIds.filter(id => id && selectedLeads.has(id)).length;
-                            return selectedCount > 0 && selectedCount === leadIds.length;
-                          })()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            if (!h.leads || h.leads.length === 0) return;
-                            
-                            const newSelectedLeads = new Set(selectedLeads);
-                            const leadIds = (h.leads as Lead[]).map(lead => lead.id).filter(Boolean);
-                            
-                            if (e.target.checked) {
-                              // Select all leads from this company
-                              leadIds.forEach(id => {
-                                if (id) newSelectedLeads.add(id);
-                              });
-                            } else {
-                              // Deselect all leads from this company
-                              leadIds.forEach(id => {
-                                if (id) newSelectedLeads.delete(id);
-                              });
-                            }
-                            
-                            setSelectedLeads(newSelectedLeads);
-                          }}
-                          style={{
-                            cursor: "pointer",
-                            flexShrink: 0,
-                            width: "16px",
-                            height: "16px",
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        
+                        {/* Row number */}
                         <div
                           style={{
                             width: "18px",
@@ -814,15 +679,8 @@ export default function Dashboard() {
                             }}
                           >
                             <span>{h.date}</span>
-
                             <span style={{ opacity: 0.6 }}>·</span>
-
-                            <span
-                              style={{
-                                color: "var(--text1)",
-                                fontWeight: "600",
-                              }}
-                            >
+                            <span style={{ color: "var(--text1)", fontWeight: "600" }}>
                               {h.leadsFound} leads
                             </span>
                           </div>
@@ -838,13 +696,7 @@ export default function Dashboard() {
                         }}
                       >
                         {loadingCompanyData === h.domain ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                            }}
-                          >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <div
                               style={{
                                 width: "16px",
@@ -855,13 +707,7 @@ export default function Dashboard() {
                                 animation: "spin 1s linear infinite",
                               }}
                             />
-
-                            <span
-                              style={{
-                                fontSize: "12px",
-                                color: "var(--text2)",
-                              }}
-                            >
+                            <span style={{ fontSize: "12px", color: "var(--text2)" }}>
                               Loading...
                             </span>
                           </div>
@@ -891,35 +737,21 @@ export default function Dashboard() {
                         paddingTop: 12,
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: "#888",
-                        }}
-                      >
-                        Showing {historyStartIndex + 1}-
-                        {Math.min(historyEndIndex, history.length)} of{" "}
+                      <span style={{ fontSize: 12, color: "#888" }}>
+                        Showing {historyStartIndex + 1}-{Math.min(historyEndIndex, history.length)} of{" "}
                         {history.length} searches
                       </span>
-
                       <div style={{ display: "flex", gap: 6 }}>
                         <button
                           className="btn btn-secondary btn-sm"
-                          onClick={() =>
-                            setHistoryPage((p) => Math.max(1, p - 1))
-                          }
+                          onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
                           disabled={historyPage === 1}
                         >
                           Prev
                         </button>
-
                         <button
                           className="btn btn-secondary btn-sm"
-                          onClick={() =>
-                            setHistoryPage((p) =>
-                              Math.min(totalHistoryPages, p + 1)
-                            )
-                          }
+                          onClick={() => setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))}
                           disabled={historyPage === totalHistoryPages}
                         >
                           Next
@@ -939,19 +771,19 @@ export default function Dashboard() {
         <div className="card-header">
           <span className="card-title">Performance Overview</span>
           <div className="filter-pills">
-            <button 
+            <button
               className={`filter-pill ${performancePeriod === 'week' ? 'active' : ''}`}
               onClick={() => setPerformancePeriod('week')}
             >
               Week
             </button>
-            <button 
+            <button
               className={`filter-pill ${performancePeriod === 'month' ? 'active' : ''}`}
               onClick={() => setPerformancePeriod('month')}
             >
               Month
             </button>
-            <button 
+            <button
               className={`filter-pill ${performancePeriod === 'year' ? 'active' : ''}`}
               onClick={() => setPerformancePeriod('year')}
             >
@@ -965,7 +797,6 @@ export default function Dashboard() {
               {formatDateRange(getDateRange().start, getDateRange().end)}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {/* Fix 5: Correct component name MiniTrendChart (not MiniTrendCharts) */}
               <MiniTrendChart
                 title="Searches vs Leads Found"
                 subtitle={`Total ${searchesCount} searches · ${leadsFoundCount} leads found`}
@@ -992,6 +823,164 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Export Company Picker Modal */}
+      {exportModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setExportModalOpen(false);
+          }}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              borderRadius: 14,
+              padding: 24,
+              width: 500,
+              maxWidth: "92vw",
+              maxHeight: "80vh",
+              overflow: "auto",
+              border: "1px solid var(--border)",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ marginBottom: 18 }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600, color: "var(--text1)" }}>
+                Select companies to export
+              </h3>
+              <p style={{ margin: 0, fontSize: 13, color: "var(--text2)" }}>
+                Format:{" "}
+                <span style={{ fontWeight: 600, textTransform: "uppercase" }}>{exportFormat}</span>{" "}
+                &nbsp;·&nbsp; {history.length} compan{history.length !== 1 ? "ies" : "y"} available
+              </p>
+            </div>
+
+            {/* Select All */}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                marginBottom: 12,
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "var(--surface2)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={history.length > 0 && selectedCompanies.size === history.length}
+                onChange={(e) =>
+                  setSelectedCompanies(
+                    e.target.checked ? new Set(history.map((h) => h.id)) : new Set()
+                  )
+                }
+                style={{ width: 15, height: 15, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text1)" }}>
+                Select all ({history.length})
+              </span>
+            </label>
+
+            {/* Company List */}
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                overflow: "hidden",
+                marginBottom: 20,
+              }}
+            >
+              {history.map((h, i) => (
+                <label
+                  key={h.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    cursor: "pointer",
+                    padding: "11px 14px",
+                    borderBottom: i < history.length - 1 ? "1px solid var(--border)" : "none",
+                    background: selectedCompanies.has(h.id) ? "var(--surface2)" : "transparent",
+                    transition: "background 0.12s ease",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCompanies.has(h.id)}
+                    onChange={(e) => {
+                      const next = new Set(selectedCompanies);
+                      if (e.target.checked) next.add(h.id);
+                      else next.delete(h.id);
+                      setSelectedCompanies(next);
+                    }}
+                    style={{ width: 15, height: 15, cursor: "pointer", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text1)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {h.domain}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                      {h.date}&nbsp;·&nbsp;
+                      <span style={{ fontWeight: 600, color: "var(--text1)" }}>{h.leadsFound} leads</span>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingTop: 4,
+              }}
+            >
+              <span style={{ fontSize: 13, color: "var(--text2)" }}>
+                {selectedCompanies.size} compan{selectedCompanies.size !== 1 ? "ies" : "y"} selected
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setExportModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleConfirmExport}
+                  disabled={selectedCompanies.size === 0}
+                >
+                  Export
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-} 
+}

@@ -4,9 +4,12 @@ import { ExternalLink, Bookmark, Download } from "lucide-react";
 
 type Props = {
   leads: Lead[];
+  selectedLeads?: Set<string>;
+  onSelectLead?: (leadId: string, checked: boolean) => void;
+  showCheckbox?: boolean;
 };
 
-export default function LeadsTable({ leads }: Props) {
+export default function LeadsTable({ leads, selectedLeads = new Set(), onSelectLead, showCheckbox = false }: Props) {
   const getScoreColor = (score: number) => {
     if (score >= 80) return "bg-green-100 text-green-800";
     if (score >= 60) return "bg-yellow-100 text-yellow-800";
@@ -18,6 +21,11 @@ export default function LeadsTable({ leads }: Props) {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
+            {showCheckbox && (
+              <th className="px-4 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                <input type="checkbox" className="w-4 h-4" disabled style={{ cursor: 'default' }} />
+              </th>
+            )}
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Name</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Role</th>
             <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">Email</th>
@@ -29,7 +37,22 @@ export default function LeadsTable({ leads }: Props) {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {leads.map((lead, idx) => (
-            <tr key={idx} className="hover:bg-gray-50 transition-colors border-b border-gray-200">
+            <tr key={lead.id || idx} className="hover:bg-gray-50 transition-colors border-b border-gray-200">
+              {showCheckbox && (
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={lead.id ? selectedLeads.has(lead.id) : false}
+                    onChange={(e) => {
+                      if (lead.id && onSelectLead) {
+                        onSelectLead(lead.id, e.target.checked);
+                      }
+                    }}
+                    className="w-4 h-4"
+                    style={{ cursor: 'pointer' }}
+                  />
+                </td>
+              )}
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-base font-semibold text-gray-900">{lead.name}</div>
               </td>

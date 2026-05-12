@@ -75,10 +75,6 @@ function EmptyState({
 
 export default function Results() {
   const [filter, setFilter] = useState("All");
-  const [selectedLeads, setSelectedLeads] = useState<Set<number>>(new Set());
-  const [saving, setSaving] = useState(false);
-  const [savedLeadSignatures, setSavedLeadSignatures] = useState<Set<string>>(new Set());
-  const [savedLeadIdMap, setSavedLeadIdMap] = useState<Map<string, string>>(new Map());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -88,13 +84,17 @@ export default function Results() {
     onConfirm: () => void;
     variant: "danger" | "primary" | "default";
   } | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [selectedForExport, setSelectedForExport] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [savedLeadSignatures, setSavedLeadSignatures] = useState<Set<string>>(new Set());
+  const [savedLeadIdMap, setSavedLeadIdMap] = useState<Map<string, string>>(new Map());
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
   const clearLeads = useLeadStore((s) => s.clearLeads);
   const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
-  const { history } = useHistoryStore();
 
-  // Debug: Log leads data changes
+  const { history } = useHistoryStore();
   useEffect(() => {
     console.log("🔍 Leads data updated:", {
       leadsCount: leads.length,
@@ -225,16 +225,7 @@ export default function Results() {
   const endIndex = startIndex + itemsPerPage;
   const currentLeads = filtered.slice(startIndex, endIndex);
 
-  const toggleLeadSelection = (index: number) => {
-    const newSelected = new Set(selectedLeads);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
-    }
-    setSelectedLeads(newSelected);
-  };
-
+  
   const handleSaveAll = async () => {
     if (filtered.length === 0) return;
     setSaving(true);
@@ -320,20 +311,40 @@ export default function Results() {
     setDialogOpen(true);
   };
 
-  const handleExport = (format: 'pdf' | 'excel' | 'word') => {
+  const handleExport = () => {
+    setSelectedForExport(new Set());
+    setExportDialogOpen(true);
+  };
+
+  const handleExportWithFormat = (format: 'pdf' | 'excel' | 'word') => {
+    const selectedLeadsForExport = filtered.filter((_, index) => selectedForExport.has(index));
+    
+    if (selectedLeadsForExport.length === 0) {
+      setDialogConfig({
+        title: "No Selection",
+        message: "Please select at least one lead to export.",
+        onConfirm: () => setDialogOpen(false),
+        variant: "default",
+      });
+      setDialogOpen(true);
+      return;
+    }
+
     const exportFilename = `search-results-${new Date().toISOString().split('T')[0]}`;
     
     switch (format) {
       case 'excel':
-        exportToExcel(filtered, exportFilename);
+        exportToExcel(selectedLeadsForExport, exportFilename);
         break;
       case 'pdf':
-        exportToPDF(filtered, exportFilename);
+        exportToPDF(selectedLeadsForExport, exportFilename);
         break;
       case 'word':
-        exportToWord(filtered, exportFilename);
+        exportToWord(selectedLeadsForExport, exportFilename);
         break;
     }
+    
+    setExportDialogOpen(false);
   };
 
   return (
@@ -400,7 +411,7 @@ export default function Results() {
                 </thead>
                 <tbody>
                   {currentLeads.map((lead, i) => (
-                    <tr key={i} onClick={() => toggleLeadSelection(i)} style={{ cursor: "pointer" }}>
+                    <tr key={i}>
                       <td>
                         <div className="lead-name">{sanitizeName(lead.name)}</div>
                       </td>
@@ -487,6 +498,145 @@ export default function Results() {
           onConfirm={dialogConfig.onConfirm}
           variant={dialogConfig.variant}
         />
+      )}
+      
+      {exportDialogOpen && (
+        <div className="dialog-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="dialog-content" style={{
+            backgroundColor: 'var(--surface)',
+            borderRadius: 12,
+            padding: 24,
+            maxWidth: 600,
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>
+                Select Leads to Export
+              </h3>
+              <p style={{ margin: '8px 0 0 0', fontSize: 14, color: 'var(--text2)' }}>
+                Choose which leads you want to export. {filtered.length} leads available.
+              </p>
+            </div>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedForExport.size === filtered.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedForExport(new Set(filtered.map((_, index) => index)));
+                    } else {
+                      setSelectedForExport(new Set());
+                    }
+                  }}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 500 }}>Select All ({filtered.length} leads)</span>
+              </label>
+            </div>
+            
+            <div style={{ 
+              maxHeight: 300, 
+              overflow: 'auto', 
+              border: '1px solid var(--border)', 
+              borderRadius: 8,
+              padding: 8
+            }}>
+              {filtered.map((lead, index) => (
+                <label key={index} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8, 
+                  cursor: 'pointer',
+                  padding: '8px 4px',
+                  borderBottom: index < filtered.length - 1 ? '1px solid var(--border)' : 'none'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedForExport.has(index)}
+                    onChange={(e) => {
+                      const newSelected = new Set(selectedForExport);
+                      if (e.target.checked) {
+                        newSelected.add(index);
+                      } else {
+                        newSelected.delete(index);
+                      }
+                      setSelectedForExport(newSelected);
+                    }}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                      {sanitizeName(lead.name)}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                      {lead.role} • {lead.company}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginTop: 20,
+              paddingTop: 16,
+              borderTop: '1px solid var(--border)'
+            }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                {selectedForExport.size} lead{selectedForExport.size !== 1 ? 's' : ''} selected
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setExportDialogOpen(false)}
+                >
+                  Cancel
+                </button>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleExportWithFormat('excel')}
+                    disabled={selectedForExport.size === 0}
+                  >
+                    Export Excel
+                  </button>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleExportWithFormat('pdf')}
+                    disabled={selectedForExport.size === 0}
+                  >
+                    Export PDF
+                  </button>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleExportWithFormat('word')}
+                    disabled={selectedForExport.size === 0}
+                  >
+                    Export Word
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
