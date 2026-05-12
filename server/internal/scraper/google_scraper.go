@@ -48,28 +48,45 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role string) ([]map[str
 	company = strings.TrimSpace(company)
 	role = strings.TrimSpace(role)
 
-	var query string
+	var queries []string
 	if role != "" {
-		query = fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role)
+		queries = []string{
+			fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
+			fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
+			fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
+		}
 	} else {
-		query = fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company)
+		queries = []string{
+			fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
+			fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
+		}
 	}
 
-	log.Printf("========================================")
-	log.Printf("LINKEDIN SEARCH START")
-	log.Printf("COMPANY => %s", company)
-	log.Printf("ROLE => %s", role)
-	log.Printf("QUERY => %s", query)
-	log.Printf("========================================")
+	for _, q := range queries {
+		log.Printf("========================================")
+		log.Printf("LINKEDIN SEARCH START")
+		log.Printf("COMPANY => %s", company)
+		log.Printf("ROLE => %s", role)
+		log.Printf("QUERY => %s", q)
+		log.Printf("========================================")
 
-	return gs.searchViaSerper(query, role)
+		results, err := gs.searchViaSerper(q, role, company)
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return []map[string]string{}, nil
 }
 
 // searchViaSerper uses Serper API
-func (gs *GoogleScraper) searchViaSerper(query, role string) ([]map[string]string, error) {
-	payload := fmt.Sprintf(`{"q":"%s"}`, query)
+func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck string) ([]map[string]string, error) {
+	payloadBytes, err := json.Marshal(map[string]string{"q": query})
+	if err != nil {
+		return nil, err
+	}
 
-	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(payload))
+	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +124,10 @@ func (gs *GoogleScraper) searchViaSerper(query, role string) ([]map[string]strin
 
 		link = strings.Split(link, "?")[0]
 
+		if !isPlausibleLinkedInUsername(link, companyForSlugCheck) {
+			continue
+		}
+
 		if seen[link] {
 			continue
 		}
@@ -134,45 +155,113 @@ func (gs *GoogleScraper) searchViaSerper(query, role string) ([]map[string]strin
 	return profiles, nil
 }
 
+func junkWebsiteHosts() []string {
+	return []string{
+		"linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+		"glassdoor.com", "indeed.com", "crunchbase.com", "bloomberg.com", "reuters.com",
+		"wikipedia.org", "youtube.com", "yelp.com", "zoominfo.com", "dnb.com", "owler.com",
+	}
+}
+
+func isJunkWebsiteURL(link string) bool {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return true
+	}
+	host := strings.ToLower(parsed.Host)
+	for _, j := range junkWebsiteHosts() {
+		if strings.Contains(host, j) {
+			return true
+		}
+	}
+	return false
+}
+
+func stripURLTrackingParams(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return link
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+// GuessWebsiteFromCompany returns https://{slug}.com from a company name (best-effort when Serper fails).
+func (gs *GoogleScraper) GuessWebsiteFromCompany(company string) string {
+	return gs.fallbackWebsite(company)
+}
+
 // FindOfficialWebsite searches official company website
 func (gs *GoogleScraper) FindOfficialWebsite(company string) (string, error) {
-	query := fmt.Sprintf(`"%s" official website`, company)
-	payload := fmt.Sprintf(`{"q":"%s"}`, query)
-
-	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(payload))
-	if err != nil {
-		return "", err
+	company = strings.TrimSpace(company)
+	if company == "" {
+		return "", nil
 	}
 
-	req.Header.Set("X-API-KEY", gs.serperKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := gs.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(gs.serperKey) == "" {
+		log.Printf("⚠️ SERPER_API_KEY missing; guessing website from company string")
+		return gs.fallbackWebsite(company), nil
 	}
 
-	var result SerperResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", err
+	queries := []string{
+		fmt.Sprintf(`"%s" official website`, company),
+		fmt.Sprintf(`%s official website`, company),
+	}
+	if parts := strings.Fields(company); len(parts) >= 1 && parts[0] != company {
+		queries = append(queries, fmt.Sprintf(`%s company website`, parts[0]))
 	}
 
-	for _, item := range result.Organic {
-		link := item.Link
-		if strings.Contains(link, "linkedin.com") ||
-			strings.Contains(link, "facebook.com") ||
-			strings.Contains(link, "instagram.com") ||
-			strings.Contains(link, "twitter.com") ||
-			strings.Contains(link, "x.com") {
+	var lastStatus int
+
+	for _, query := range queries {
+		payloadBytes, err := json.Marshal(map[string]string{"q": query})
+		if err != nil {
 			continue
 		}
-		return link, nil
+
+		req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
+		if err != nil {
+			continue
+		}
+
+		req.Header.Set("X-API-KEY", gs.serperKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := gs.client.Do(req)
+		if err != nil {
+			log.Printf("⚠️ Serper website search request error: %v", err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		lastStatus = resp.StatusCode
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("⚠️ Serper website search HTTP %d", resp.StatusCode)
+			continue
+		}
+
+		var result SerperResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			log.Printf("⚠️ Serper website JSON parse error: %v", err)
+			continue
+		}
+
+		for _, item := range result.Organic {
+			link := item.Link
+			if isJunkWebsiteURL(link) {
+				continue
+			}
+			return stripURLTrackingParams(link), nil
+		}
+
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	if lastStatus != 0 && lastStatus != http.StatusOK {
+		log.Printf("⚠️ Using guessed website after Serper HTTP %d", lastStatus)
 	}
 
 	return gs.fallbackWebsite(company), nil
@@ -181,7 +270,7 @@ func (gs *GoogleScraper) FindOfficialWebsite(company string) (string, error) {
 // SearchCompanyLeadership searches leadership profiles
 func (gs *GoogleScraper) SearchCompanyLeadership(company string) ([]map[string]string, error) {
 	query := fmt.Sprintf(`site:linkedin.com/in/ "%s" CEO OR CTO OR Founder OR HR`, company)
-	return gs.searchViaSerper(query, "")
+	return gs.searchViaSerper(query, "", strings.TrimSpace(company))
 }
 
 // fallbackWebsite creates basic domain fallback
@@ -239,6 +328,14 @@ func parseNameFromLinkedInURL(profileURL string) string {
 		return ""
 	}
 
+	nameNoise := []string{"india", "official", "career", "jobs", "team", "company", "corp", "ltd", "inc", "llc", "pvt"}
+	nameLower := strings.ToLower(name)
+	for _, w := range nameNoise {
+		if strings.Contains(nameLower, w) {
+			return ""
+		}
+	}
+
 	words := strings.Fields(name)
 	for i, w := range words {
 		if len(w) > 0 {
@@ -247,6 +344,67 @@ func parseNameFromLinkedInURL(profileURL string) string {
 	}
 
 	return strings.Join(words, " ")
+}
+
+var brandSlugNormalizer = regexp.MustCompile(`[^a-z0-9]+`)
+
+func normalizeCompanyBrand(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	return brandSlugNormalizer.ReplaceAllString(s, "")
+}
+
+// linkedInSlugAppendsCompanyBrand detects SEO-style slugs like first-last-companyname (often fake).
+func linkedInSlugAppendsCompanyBrand(username, company string) bool {
+	brand := normalizeCompanyBrand(company)
+	if len(brand) < 4 {
+		return false
+	}
+	segs := strings.Split(strings.ToLower(username), "-")
+	if len(segs) < 3 {
+		return false
+	}
+	last := segs[len(segs)-1]
+	if len(last) < 4 {
+		return false
+	}
+	if last == brand {
+		return true
+	}
+	if strings.HasSuffix(brand, last) {
+		return true
+	}
+	if strings.HasSuffix(last, brand) {
+		return true
+	}
+	return false
+}
+
+// IsPlausibleLinkedInProfileURL reports whether a /in/ slug looks like a real profile (not vanity SEO spam).
+func IsPlausibleLinkedInProfileURL(profileURL, company string) bool {
+	return isPlausibleLinkedInUsername(profileURL, company)
+}
+
+func isPlausibleLinkedInUsername(profileURL, company string) bool {
+	parts := strings.Split(profileURL, "/in/")
+	if len(parts) < 2 {
+		return false
+	}
+	username := strings.Split(strings.Split(parts[1], "?")[0], "/")[0]
+	if len(username) < 3 || len(username) > 50 {
+		return false
+	}
+	if company != "" && linkedInSlugAppendsCompanyBrand(username, company) {
+		return false
+	}
+	noiseWords := []string{"ceo", "cto", "founder", "director", "manager", "company",
+		"official", "india", "head", "corp", "ltd", "careers", "jobs", "team", "hr", "sales"}
+	lower := strings.ToLower(username)
+	for _, w := range noiseWords {
+		if strings.Contains(lower, w) {
+			return false
+		}
+	}
+	return true
 }
 
 func extractNameFromSnippet(snippet, title string) string {
@@ -276,6 +434,8 @@ func extractRoleFromText(text string) string {
 	roles := []string{
 		"CEO", "CTO", "CFO", "COO", "Founder", "HR",
 		"Head of HR", "VP Engineering", "Engineering Manager",
+		"Managing Director", "MD", "Director", "Partner", "Principal", "Co-Founder",
+		"Head of Engineering", "Head of Product", "Head of Marketing",
 	}
 
 	lower := strings.ToLower(text)

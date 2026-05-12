@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -77,7 +78,7 @@ func (gs *GrokService) EnrichLeads(companyName, website, location string, linked
 			{Role: "user", Content: prompt},
 		},
 		Temperature: 0.1,
-		MaxTokens:   1000,
+		MaxTokens:   2000,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -126,9 +127,7 @@ func (gs *GrokService) EnrichLeads(companyName, website, location string, linked
 	}
 
 	enriched.Company = companyName
-	if enriched.Website == "" {
-		enriched.Website = website
-	}
+	enriched.Website = website
 
 	for i := range enriched.Leads {
 		lead := &enriched.Leads[i]
@@ -151,6 +150,22 @@ func (gs *GrokService) EnrichLeads(companyName, website, location string, linked
 		}
 		if lead.LinkedIn != "" && !isValidLinkedInURL(lead.LinkedIn) {
 			lead.LinkedIn = ""
+		}
+	}
+
+	realURLs := make(map[string]bool)
+	for _, p := range linkedinData {
+		if u := p["url"]; u != "" {
+			realURLs[canonicalLinkedInProfileURL(u)] = true
+			realURLs[strings.ToLower(strings.TrimSpace(u))] = true
+		}
+	}
+	for i := range enriched.Leads {
+		if enriched.Leads[i].LinkedIn != "" {
+			li := enriched.Leads[i].LinkedIn
+			if !realURLs[canonicalLinkedInProfileURL(li)] && !realURLs[strings.ToLower(strings.TrimSpace(li))] {
+				enriched.Leads[i].LinkedIn = ""
+			}
 		}
 	}
 
@@ -196,7 +211,7 @@ RULES:
 2. Never guess emails. Set email to null if unknown.
 3. Prioritize: CEO, CTO, Founder, HR Head, Head of Sales, Vice President.
 4. Use your own knowledge if scraped data is missing.
-5. LinkedIn URLs must be real. Leave blank if unsure.
+5. For linkedin field: ONLY use a URL that appears EXACTLY in the scraped LinkedIn data provided below. If the person's URL is not in the scraped data, set linkedin to null. NEVER construct or guess a LinkedIn URL.
 6. Confidence: CEO/Founder=95, CTO=90, VP=85, HR=80, Director=75, Manager=70.
 
 %s
@@ -210,7 +225,7 @@ Return ONLY this JSON, no markdown, no extra text:
     {
       "name": "Full Name",
       "role": "CEO",
-      "linkedin": "https://linkedin.com/in/username",
+      "linkedin": null,
       "email": null,
       "email_status": "not_found",
       "confidence": 95,
@@ -253,6 +268,26 @@ func contains(s string, keywords ...string) bool {
 
 func isValidLinkedInURL(u string) bool {
 	return strings.HasPrefix(u, "https://") && strings.Contains(u, "linkedin.com/in/")
+}
+
+func canonicalLinkedInProfileURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Path == "" {
+		return strings.ToLower(strings.TrimSuffix(raw, "/"))
+	}
+	host := strings.ToLower(strings.TrimPrefix(parsed.Host, "www."))
+	if !strings.HasSuffix(host, "linkedin.com") {
+		return strings.ToLower(strings.TrimSuffix(raw, "/"))
+	}
+	path := strings.TrimSuffix(parsed.Path, "/")
+	if path == "" {
+		return ""
+	}
+	return "https://linkedin.com" + path
 }
 
 func cleanJSONResponse(text string) string {

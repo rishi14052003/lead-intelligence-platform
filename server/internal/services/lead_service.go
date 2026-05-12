@@ -97,11 +97,16 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		website = utils.FormatDomain(companyName)
 		log.Printf("✓ Direct domain input detected: %s", website)
 	} else {
-		website, _ = ls.googleScraper.FindOfficialWebsite(searchTerm)
-		if website != "" {
-			log.Printf("✓ Found official website via Serper: %s", website)
+		var webErr error
+		website, webErr = ls.googleScraper.FindOfficialWebsite(searchTerm)
+		if webErr != nil {
+			log.Printf("⚠️ FindOfficialWebsite error for %q: %v", searchTerm, webErr)
+		}
+		if strings.TrimSpace(website) == "" {
+			website = ls.googleScraper.GuessWebsiteFromCompany(companyName)
+			log.Printf("⚠️ Using guessed company website from name %q → %s", companyName, website)
 		} else {
-			log.Printf("⚠️ Could not find official website for: %s", searchTerm)
+			log.Printf("✓ Found official website via Serper: %s", website)
 		}
 	}
 
@@ -120,16 +125,33 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		var allProfiles []map[string]string
 		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
 		for _, role := range roles {
-			// Use searchTerm (company + location) for more precise LinkedIn search
-			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(searchTerm, role)
+			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
 			if err != nil {
-				log.Printf("⚠️ LinkedIn search for %s %s: %v", searchTerm, role, err)
+				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
 				continue
 			}
 			if len(profiles) > 0 {
 				log.Printf("✓ Found %d LinkedIn profiles for role: %s", len(profiles), role)
 				allProfiles = append(allProfiles, profiles...)
+			}
+		}
+		if len(allProfiles) == 0 {
+			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName)
+			if err != nil {
+				log.Printf("⚠️ Leadership fallback search: %v", err)
+			} else if len(leadership) > 0 {
+				log.Printf("✓ Leadership fallback returned %d profiles", len(leadership))
+				allProfiles = append(allProfiles, leadership...)
+			}
+		}
+		if len(allProfiles) == 0 {
+			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "")
+			if err != nil {
+				log.Printf("⚠️ Generic LinkedIn fallback: %v", err)
+			} else if len(generic) > 0 {
+				log.Printf("✓ Generic LinkedIn fallback returned %d profiles", len(generic))
+				allProfiles = append(allProfiles, generic...)
 			}
 		}
 		linkedinChan <- linkedinResult{profiles: allProfiles}
@@ -196,20 +218,27 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 				continue
 			}
 			key := strings.ToLower(strings.ReplaceAll(l.Name, " ", "") + l.Role)
+			linkedinURL := l.LinkedIn
+			if linkedinURL != "" {
+				linkedinURL = findMatchingLinkedInURL(l.Name, companyName, liRes.profiles)
+				if linkedinURL == "" && isValidLinkedInURL(l.LinkedIn) && scraper.IsPlausibleLinkedInProfileURL(l.LinkedIn, companyName) {
+					linkedinURL = l.LinkedIn
+				}
+			}
 			leadsMap[key] = &models.Lead{
 				Name:          l.Name,
 				Role:          l.Role,
 				Email:         l.Email,
 				EmailStatus:   l.EmailStatus,
-				LinkedIn:      l.LinkedIn,
+				LinkedIn:      linkedinURL,
 				Company:       companyName,
-				Website:       enriched.Website,
-				CompanyURL:    enriched.Website,
+				Website:       website,
+				CompanyURL:    website,
 				Confidence:    l.Confidence,
 				Source:        l.Source,
 				EmailVerified: false,
 				SearchID:      searchObjID,
-				Score:         ls.scoringService.CalculateScore(l.Role, l.LinkedIn != "", l.Email != ""),
+				Score:         ls.scoringService.CalculateScore(l.Role, linkedinURL != "", l.Email != ""),
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),
 			}
@@ -420,6 +449,43 @@ func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{},
 		},
 	}
 	collection.UpdateByID(ctx, searchID, update)
+}
+
+func findMatchingLinkedInURL(name, company string, profiles []map[string]string) string {
+	if name == "" {
+		return ""
+	}
+	nameLower := strings.ToLower(strings.ReplaceAll(name, " ", ""))
+	nameParts := strings.Fields(strings.ToLower(name))
+
+	for _, p := range profiles {
+		profileName := strings.ToLower(strings.ReplaceAll(p["name"], " ", ""))
+		url := p["url"]
+		if url == "" {
+			continue
+		}
+
+		if profileName == nameLower {
+			if scraper.IsPlausibleLinkedInProfileURL(url, company) {
+				return url
+			}
+			continue
+		}
+
+		if len(nameParts) >= 2 {
+			urlLower := strings.ToLower(url)
+			matchCount := 0
+			for _, part := range nameParts {
+				if len(part) > 2 && strings.Contains(urlLower, part) {
+					matchCount++
+				}
+			}
+			if matchCount >= 2 && scraper.IsPlausibleLinkedInProfileURL(url, company) {
+				return url
+			}
+		}
+	}
+	return ""
 }
 
 func matchEmailToName(email, name string) bool {
