@@ -19,14 +19,13 @@ func NewLinkedInParser() *LinkedInParser {
 }
 
 // SearchProfiles searches for LinkedIn profiles for a company and role
-func (lp *LinkedInParser) SearchProfiles(company string, role string) ([]map[string]string, error) {
-	return lp.googleScraper.SearchLinkedInProfiles(company, role)
+func (lp *LinkedInParser) SearchProfiles(company string, role string, location string) ([]map[string]string, error) {
+	return lp.googleScraper.SearchLinkedInProfiles(company, role, location)
 }
 
-// SearchLinkedInByRoleWithValidation searches and validates profiles — fixed to not over-filter
-// SearchLinkedInByRoleWithValidation searches and validates profiles
-func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, role string) ([]map[string]string, error) {
-	profiles, err := lp.googleScraper.SearchLinkedInProfiles(company, role)
+// SearchLinkedInByRoleWithValidation searches and validates profiles.
+func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, role string, location string) ([]map[string]string, error) {
+	profiles, err := lp.googleScraper.SearchLinkedInProfiles(company, role, location)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +89,7 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 
 // SearchCompanyProfiles searches for all employees of a company
 func (lp *LinkedInParser) SearchCompanyProfiles(company string) ([]map[string]string, error) {
-	profiles, err := lp.googleScraper.SearchLinkedInProfiles(company, "")
+	profiles, err := lp.googleScraper.SearchLinkedInProfiles(company, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +121,7 @@ func (lp *LinkedInParser) SearchCompanyProfiles(company string) ([]map[string]st
 
 // SearchCEOProfiles returns CEO LinkedIn URLs for a company
 func (lp *LinkedInParser) SearchCEOProfiles(company string) ([]string, error) {
-	profiles, err := lp.SearchProfiles(company, "CEO")
+	profiles, err := lp.SearchProfiles(company, "CEO", "")
 	if err != nil {
 		return nil, err
 	}

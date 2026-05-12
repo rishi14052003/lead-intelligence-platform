@@ -125,7 +125,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		var allProfiles []map[string]string
 		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
 		for _, role := range roles {
-			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role)
+			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role, location)
 			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
 			if err != nil {
 				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
@@ -137,7 +137,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 		}
 		if len(allProfiles) == 0 {
-			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName)
+			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName, location)
 			if err != nil {
 				log.Printf("⚠️ Leadership fallback search: %v", err)
 			} else if len(leadership) > 0 {
@@ -146,7 +146,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 		}
 		if len(allProfiles) == 0 {
-			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "")
+			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "", location)
 			if err != nil {
 				log.Printf("⚠️ Generic LinkedIn fallback: %v", err)
 			} else if len(generic) > 0 {
@@ -291,6 +291,8 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 		}
 	}
+
+	dedupeLeadsMapByLinkedIn(leadsMap)
 
 	// Step 8: Finalise leads list
 	var leads []models.Lead
@@ -449,6 +451,72 @@ func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{},
 		},
 	}
 	collection.UpdateByID(ctx, searchID, update)
+}
+
+func linkedInProfileSlug(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u := strings.ToLower(raw)
+	idx := strings.Index(u, "/in/")
+	if idx == -1 {
+		return ""
+	}
+	rest := u[idx+len("/in/"):]
+	rest = strings.Split(rest, "?")[0]
+	rest = strings.Split(rest, "/")[0]
+	return strings.TrimSpace(rest)
+}
+
+func rolePriority(role string) int {
+	r := strings.ToLower(strings.TrimSpace(role))
+	switch {
+	case strings.Contains(r, "chief executive"), strings.Contains(r, "founder"), strings.Contains(r, "owner"):
+		return 100
+	case strings.Contains(r, "ceo") && !strings.Contains(r, "office"):
+		return 98
+	case strings.Contains(r, "cto"):
+		return 92
+	case strings.Contains(r, "cfo"), strings.Contains(r, "coo"):
+		return 90
+	case strings.Contains(r, "vp"), strings.Contains(r, "vice president"):
+		return 82
+	case strings.Contains(r, "head"):
+		return 76
+	case strings.Contains(r, "director"):
+		return 74
+	case strings.Contains(r, "hr"):
+		return 72
+	case strings.Contains(r, "manager"):
+		return 65
+	default:
+		return 50
+	}
+}
+
+// dedupeLeadsMapByLinkedIn collapses multiple roles for the same LinkedIn /in/{slug} into one lead.
+func dedupeLeadsMapByLinkedIn(m map[string]*models.Lead) {
+	slugWinner := make(map[string]string)
+	for key := range m {
+		lead := m[key]
+		slug := linkedInProfileSlug(lead.LinkedIn)
+		if slug == "" {
+			continue
+		}
+		winKey, ok := slugWinner[slug]
+		if !ok {
+			slugWinner[slug] = key
+			continue
+		}
+		a, b := m[winKey], lead
+		pa, pb := rolePriority(a.Role), rolePriority(b.Role)
+		if pb > pa || (pb == pa && b.Score > a.Score) {
+			delete(m, winKey)
+			slugWinner[slug] = key
+		} else {
+			delete(m, key)
+		}
+	}
 }
 
 func findMatchingLinkedInURL(name, company string, profiles []map[string]string) string {
