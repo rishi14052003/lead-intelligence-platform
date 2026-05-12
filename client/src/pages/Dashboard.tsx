@@ -663,7 +663,15 @@ export default function Dashboard() {
                       marginBottom: "10px",
                       borderRadius: "12px",
                       ...rowSurfaceStyle,
-                      transition: "background 0.18s",
+                      transition: "all 0.18s ease",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.background = "var(--surface3)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.background = "var(--surface2)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
