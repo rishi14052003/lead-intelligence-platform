@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { Search, List, BarChart3, Bookmark, Users, Bell, Settings, X, Moon, Sun } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
+import iconImage from "../assets/icon.png";
 import ProfileMenu from "../components/ProfileMenu";
 import ProtectedRoute from "./ProtectedRoute";
 import { publicRoutes, protectedRoutes, getDefaultRoute } from "./routeConfig";
@@ -21,7 +22,7 @@ function DarkSidebar({ currentPage, onNavigate }: { currentPage: string; onNavig
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
-        <div className="logo-icon">L</div>
+        <img src={iconImage} alt="LeadFinder" className="logo-icon" />
         <div>
           <div className="logo-text" style={{ fontSize: "18px" }}>LeadFinder</div>
           <div className="logo-sub" style={{ fontSize: "18px" }}>Intelligence</div>
