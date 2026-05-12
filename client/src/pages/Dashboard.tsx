@@ -279,16 +279,24 @@ export default function Dashboard() {
   const [showAllCompanies, setShowAllCompanies] = useState(false);
   const [loadingCompanyData, setLoadingCompanyData] = useState<string | null>(null);
   const { history, loadFromLocalStorage, removeHistoryItem, removeHistoryByDomain } = useHistoryStore();
-  const { leads: savedLeads, fetchSavedLeads, clearLeads } = useLeadStore();
+  const { leads: savedLeads, fetchSavedLeads, clearLeads, setLoading, setError } = useLeadStore();
 
   useEffect(() => {
     loadFromLocalStorage();
   }, [loadFromLocalStorage]);
 
   useEffect(() => {
-    fetchSavedLeads();
-    console.log("📊 Dashboard fetched saved leads:", savedLeads.length);
-  }, [fetchSavedLeads, savedLeads.length]);
+    const loadLeads = async () => {
+      try {
+        await fetchSavedLeads();
+        console.log("📊 Dashboard fetched saved leads successfully");
+      } catch (error) {
+        console.error("❌ Failed to fetch saved leads:", error);
+      }
+    };
+    
+    loadLeads();
+  }, [fetchSavedLeads]);
 
   // Clear search results when history becomes empty
   useEffect(() => {
@@ -297,6 +305,58 @@ export default function Dashboard() {
       clearLeads();
     }
   }, [history.length, clearLeads]);
+
+  // Function to load search results with proper error handling and timeout
+  const loadSearchResults = async (domain: string): Promise<{ leads: any[]; query: string } | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log("🔍 Loading search results for:", domain);
+      
+      // Use improved API service with built-in timeout
+      const result = await getSearchResultsFromDatabase(domain, 1500);
+      
+      if (result && result.leads.length > 0) {
+        console.log("✅ Retrieved results from database:", result.leads.length);
+        return result;
+      } else {
+        console.log("⚠️ No database results found");
+        return null;
+      }
+    } catch (error) {
+      console.error("❌ Error loading search results:", error);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to load company results with proper error handling and timeout
+  const loadCompanyResults = async (company: string): Promise<any[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log("🏢 Loading company results for:", company);
+      
+      // Use improved API service with built-in timeout
+      const result = await getCompanySearchResultsFromDatabase(company, 1500);
+      
+      if (result && result.length > 0) {
+        console.log("✅ Retrieved company results from database:", result.length);
+        return result;
+      } else {
+        console.log("⚠️ No database results found for company");
+        return [];
+      }
+    } catch (error) {
+      console.error("❌ Error loading company results:", error);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getDateRange = () => {
     if (performancePeriod === 'week') return getWeekRange();
@@ -537,11 +597,11 @@ export default function Dashboard() {
                       console.log("📅 Recent Activity row clicked:", h.domain);
                       setLoadingCompanyData(h.domain);
                       
-                      // Try to get from database first
                       try {
-                        const dbResults = await getSearchResultsFromDatabase(h.domain);
+                        // Try to get from database first with timeout
+                        const dbResults = await loadSearchResults(h.domain);
+                        
                         if (dbResults && dbResults.leads.length > 0) {
-                          console.log("✅ Retrieved results from database:", dbResults.leads.length);
                           useLeadStore.setState({
                             leads: dbResults.leads,
                             searchQuery: dbResults.query,
@@ -568,7 +628,7 @@ export default function Dashboard() {
                           });
                         }
                       } catch (error) {
-                        console.error("❌ Error retrieving from database:", error);
+                        console.error("❌ Error in recent activity click handler:", error);
                         // Fallback to history leads
                         if (h.leads && h.leads.length > 0) {
                           useLeadStore.setState({
@@ -577,10 +637,22 @@ export default function Dashboard() {
                             loading: false,
                             error: null,
                           });
+                        } else {
+                          useLeadStore.setState({
+                            leads: [],
+                            searchQuery: h.domain,
+                            loading: false,
+                            error: "Failed to load data",
+                          });
                         }
                       }
+      
                       setLoadingCompanyData(null);
-                      navigate("/results");
+                      
+                      // Small delay to ensure state is updated before navigation
+                      setTimeout(() => {
+                        navigate("/results");
+                      }, 1000);
                     }}
                     style={{
                       cursor: "pointer",
@@ -629,26 +701,42 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    {/* Right: Badge */}
-                    <button
-                      className="btn btn-ghost btn-sm btn-icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeHistoryItem(h.id);
-                      }}
-                      title="Delete this activity"
-                      style={{
-                        minWidth: "34px",
-                        height: "34px",
-                        borderRadius: "9px",
-                        flexShrink: 0,
-                        color: "var(--text2)",
-                      }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {/* Right: Loading/Status */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {loadingCompanyData === h.domain ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ 
+                            width: "16px", 
+                            height: "16px", 
+                            border: "2px solid var(--border)", 
+                            borderTop: "2px solid var(--accent)", 
+                            borderRadius: "50%", 
+                            animation: "spin 1s linear infinite" 
+                          }} />
+                          <span style={{ fontSize: "12px", color: "var(--text2)" }}>Loading...</span>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-ghost btn-sm btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeHistoryItem(h.id);
+                          }}
+                          title="Delete this activity"
+                          style={{
+                            minWidth: "34px",
+                            height: "34px",
+                            borderRadius: "9px",
+                            flexShrink: 0,
+                            color: "var(--text2)",
+                          }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {showAllHistory && totalHistoryPages > 1 && (
@@ -716,13 +804,11 @@ export default function Dashboard() {
                       console.log("🏢 Top Companies row clicked:", company.company);
                       setLoadingCompanyData(company.company);
                       
-                      // Try to get from database first
                       try {
-                        console.log("🔍 Retrieving company results from database...");
-                        const dbLeads = await getCompanySearchResultsFromDatabase(company.company);
+                        // Try to get from database first with timeout
+                        const dbLeads = await loadCompanyResults(company.company);
                         
                         if (dbLeads.length > 0) {
-                          console.log("✅ Retrieved company results from database:", dbLeads.length);
                           useLeadStore.setState({
                             leads: dbLeads,
                             searchQuery: company.company,
@@ -756,7 +842,7 @@ export default function Dashboard() {
                           }
                         }
                       } catch (error) {
-                        console.error("❌ Error retrieving from database:", error);
+                        console.error("❌ Error in top companies click handler:", error);
                         // Fallback to history leads
                         const companyHistoryItems = history.filter(h => h.domain === company.company);
                         const allCompanyLeads = companyHistoryItems.flatMap(h => h.leads || []);
@@ -777,8 +863,13 @@ export default function Dashboard() {
                           });
                         }
                       }
+      
                       setLoadingCompanyData(null);
-                      navigate("/results");
+                      
+                      // Small delay to ensure state is updated before navigation
+                      setTimeout(() => {
+                        navigate("/results");
+                      }, 1000);
                     }}
                     style={{
                       cursor: "pointer",
@@ -824,25 +915,41 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      className="btn btn-ghost btn-sm btn-icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeHistoryByDomain(company.company);
-                      }}
-                      title="Delete this company from activity"
-                      style={{
-                        minWidth: "36px",
-                        height: "36px",
-                        borderRadius: "9px",
-                        flexShrink: 0,
-                        color: "var(--text2)",
-                      }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {loadingCompanyData === company.company ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ 
+                            width: "16px", 
+                            height: "16px", 
+                            border: "2px solid var(--border)", 
+                            borderTop: "2px solid var(--accent)", 
+                            borderRadius: "50%", 
+                            animation: "spin 1s linear infinite" 
+                          }} />
+                          <span style={{ fontSize: "12px", color: "var(--text2)" }}>Loading...</span>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-ghost btn-sm btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeHistoryByDomain(company.company);
+                          }}
+                          title="Delete this company from activity"
+                          style={{
+                            minWidth: "36px",
+                            height: "36px",
+                            borderRadius: "9px",
+                            flexShrink: 0,
+                            color: "var(--text2)",
+                          }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#ef4444"}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text2)"}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {showAllCompanies && totalCompanyPages > 1 && (
