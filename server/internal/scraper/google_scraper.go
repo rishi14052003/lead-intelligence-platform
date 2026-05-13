@@ -643,13 +643,29 @@ func normalizeCompanyHomepageURL(link string) string {
 	return scheme + "://" + host + "/"
 }
 
+// firstOrganicCompanyWebsite returns the homepage URL for the first organic result that looks like
+// a real company site (not LinkedIn, directories, etc.), preserving Google's result order.
+func firstOrganicCompanyWebsite(result SerperResponse) string {
+	for _, item := range result.Organic {
+		link := stripURLTrackingParams(item.Link)
+		if !isOfficialWebsiteCandidate(link) {
+			continue
+		}
+		return normalizeCompanyHomepageURL(link)
+	}
+	return ""
+}
+
 // GuessWebsiteFromCompany returns https://{slug}.com from a company name (best-effort when Serper fails).
 func (gs *GoogleScraper) GuessWebsiteFromCompany(company string) string {
 	return gs.fallbackWebsite(company)
 }
 
 // FindOfficialWebsite uses Serper (Google) to resolve the corporate site from the company name.
-// location is optional context (city/state/country) to disambiguate common names.
+// It first runs a natural query (company + optional location) and uses the first organic result
+// that qualifies as a company homepage (same idea as "use what Google returns first") while skipping
+// obvious non-site links (e.g. LinkedIn). If that yields nothing, it falls back to broader queries
+// with light relevance scoring.
 func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (string, error) {
 	companyName = strings.TrimSpace(companyName)
 	location = strings.TrimSpace(location)
@@ -660,6 +676,23 @@ func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (stri
 	if strings.TrimSpace(gs.serperKey) == "" {
 		log.Printf("⚠️ SERPER_API_KEY missing; guessing website from company string")
 		return gs.fallbackWebsite(companyName), nil
+	}
+
+	// Natural Google-style query: same idea as typing company name + location in the search box.
+	naturalQuery := companyName
+	if location != "" {
+		naturalQuery = strings.TrimSpace(companyName + " " + location)
+	}
+	if naturalQuery != "" {
+		result, err := gs.serperGoogleSearch(naturalQuery)
+		if err != nil {
+			log.Printf("⚠️ Serper natural website query error (q=%q): %v", naturalQuery, err)
+		} else if picked := firstOrganicCompanyWebsite(result); picked != "" {
+			log.Printf("✓ Company website from first qualifying Serper organic result (q=%q): %s", naturalQuery, picked)
+			return picked, nil
+		} else {
+			log.Printf("⚠️ No qualifying homepage in organic results for natural query %q; trying fallback queries", naturalQuery)
+		}
 	}
 
 	queries := []string{}
