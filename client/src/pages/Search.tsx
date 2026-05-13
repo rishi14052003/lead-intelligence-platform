@@ -9,6 +9,7 @@ import {
   Building2,
   MapPin,
   Zap,
+  Sparkles,
 } from "lucide-react";
 import { useLeadStore } from "../store/leadStore";
 import { useHistoryStore } from "../store/historyStore";
@@ -23,6 +24,7 @@ const FEATURES = [
     color: "rgba(249,115,22,0.12)",
     border: "rgba(249,115,22,0.2)",
     iconColor: "#f97316",
+    step: "01",
   },
   {
     icon: Users,
@@ -31,6 +33,7 @@ const FEATURES = [
     color: "rgba(16,185,129,0.1)",
     border: "rgba(16,185,129,0.2)",
     iconColor: "#10b981",
+    step: "02",
   },
   {
     icon: Shield,
@@ -39,6 +42,7 @@ const FEATURES = [
     color: "rgba(167,139,250,0.1)",
     border: "rgba(167,139,250,0.2)",
     iconColor: "#a78bfa",
+    step: "03",
   },
 ];
 
@@ -259,7 +263,7 @@ export default function SearchPage() {
           </div>
         </div>
 
-        {/* ── How it works + What you get ── */}
+        {/* ── How it works ── */}
         <div className="search-features-section search-features-section--full">
           <p className="search-features-eyebrow">How it works</p>
           <div className="search-how-grid">
@@ -281,29 +285,36 @@ export default function SearchPage() {
             ))}
           </div>
 
+          {/* ── What You Get — now matches How It Works card layout ── */}
           <div className="search-what-you-get-strip">
             <p className="search-features-eyebrow search-features-eyebrow--what-you-get">
               What you get
             </p>
-            <div className="search-features-grid search-features-grid--three search-features-grid--what-you-get">
+            <div className="search-how-grid search-what-grid">
               {FEATURES.map((f, i) => (
                 <div
                   key={i}
-                  className="search-feature-card search-feature-card--stretch"
+                  className="search-feature-card search-step-card search-wyg-card"
                   style={{ animationDelay: `${0.2 + i * 0.08}s` }}
                 >
-                  <div
-                    className="search-feature-icon-wrap"
-                    style={{
-                      background: f.color,
-                      borderColor: f.border,
-                      color: f.iconColor,
-                    }}
-                  >
-                    <f.icon size={18} />
+                  <div className="search-step-top">
+                    <span className="search-step-num search-wyg-num">
+                      <Sparkles size={10} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+                      FEATURE {f.step}
+                    </span>
+                    <div
+                      className="search-step-icon-wrap"
+                      style={{
+                        background: f.color,
+                        borderColor: f.border,
+                        color: f.iconColor,
+                      }}
+                    >
+                      <f.icon size={16} />
+                    </div>
                   </div>
-                  <h3 className="search-feature-title">{f.title}</h3>
-                  <p className="search-feature-desc">{f.desc}</p>
+                  <div className="search-how-step-title">{f.title}</div>
+                  <div className="search-how-step-desc">{f.desc}</div>
                 </div>
               ))}
             </div>

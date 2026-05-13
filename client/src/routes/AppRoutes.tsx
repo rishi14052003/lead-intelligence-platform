@@ -141,6 +141,11 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app">
+      <div className="app-ambient-orbs" aria-hidden="true">
+        <div className="app-bg-orb app-bg-orb-1" />
+        <div className="app-bg-orb app-bg-orb-2" />
+        <div className="app-bg-orb app-bg-orb-3" />
+      </div>
       <DarkSidebar currentPage={currentPage} onNavigate={handleNavigate} />
       <DarkTopbar
         currentPage={currentPage}
