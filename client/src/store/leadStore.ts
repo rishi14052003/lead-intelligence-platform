@@ -49,10 +49,14 @@ export const useLeadStore = create<State>((set) => ({
     
     const stored = getSearchResultsFromStorage();
     if (stored) {
-      console.log("✅ RESTORED SEARCH RESULTS:", stored.results.length, "results for query:", stored.query);
+      const displayQuery =
+        stored.location?.trim()
+          ? `${stored.query}, ${stored.location.trim()}`
+          : stored.query;
+      console.log("✅ RESTORED SEARCH RESULTS:", stored.results.length, "results for query:", displayQuery);
       set({
         leads: stored.results,
-        searchQuery: stored.query,
+        searchQuery: displayQuery,
       });
     } else {
       console.log("ℹ️ NO STORED SEARCH RESULTS FOUND");

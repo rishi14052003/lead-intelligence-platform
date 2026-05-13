@@ -270,7 +270,7 @@ export default function SearchPage() {
             {HOW_IT_WORKS.map((step, i) => (
               <div
                 key={i}
-                className="search-feature-card search-step-card"
+                className="search-feature-card search-step-card search-how-works-card"
                 style={{ animationDelay: `${0.05 + i * 0.08}s` }}
               >
                 <div className="search-step-top">

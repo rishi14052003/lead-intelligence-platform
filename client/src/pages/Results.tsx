@@ -89,6 +89,7 @@ export default function Results() {
 
   const leads = useLeadStore((s) => s.leads);
   const loading = useLeadStore((s) => s.loading);
+  const searchQuery = useLeadStore((s) => s.searchQuery);
   const clearLeads = useLeadStore((s) => s.clearLeads);
   const restoreSearchResults = useLeadStore((s) => s.restoreSearchResults);
 
@@ -326,6 +327,12 @@ export default function Results() {
       >
         <div>
           <div className="page-title">Search Results</div>
+          {searchQuery ? (
+            <div className="page-subtitle">
+              Search results for{" "}
+              <span className="results-search-query-name">{searchQuery}</span>
+            </div>
+          ) : null}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button
