@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"log"
+	"regexp"
 	"strings"
 	"lead-finder/internal/utils"
 )
@@ -21,6 +22,29 @@ func NewLinkedInParser() *LinkedInParser {
 // SearchProfiles searches for LinkedIn profiles for a company and role.
 func (lp *LinkedInParser) SearchProfiles(company string, role string, location string, linkedinCompanySlug string) ([]map[string]string, error) {
 	return lp.googleScraper.SearchLinkedInProfiles(company, role, location, linkedinCompanySlug)
+}
+
+// ExtractPublicEmailFromProfile tries to read an email visible on a public LinkedIn profile page.
+// LinkedIn often hides contact info unless authenticated/connected, so this is best-effort only.
+func (lp *LinkedInParser) ExtractPublicEmailFromProfile(profileURL string) string {
+	profileURL = strings.TrimSpace(profileURL)
+	if profileURL == "" || !strings.Contains(strings.ToLower(profileURL), "linkedin.com/in/") {
+		return ""
+	}
+	html, err := lp.googleScraper.FetchHTML(profileURL)
+	if err != nil || strings.TrimSpace(html) == "" {
+		return ""
+	}
+	re := regexp.MustCompile(`([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})`)
+	matches := re.FindAllString(html, -1)
+	for _, email := range matches {
+		email = strings.TrimSpace(email)
+		if !utils.ValidateEmail(email) || utils.IsBlockedEmail(email) {
+			continue
+		}
+		return email
+	}
+	return ""
 }
 
 // SearchLinkedInByRoleWithValidation searches and validates profiles.

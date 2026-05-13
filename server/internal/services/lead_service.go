@@ -335,6 +335,39 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		}
 	}
 
+	// Step 7b: Best-effort LinkedIn public contact email extraction.
+	// This works only when LinkedIn exposes an email on the public page.
+	linkedinEmailCache := make(map[string]string)
+	for _, lead := range leadsMap {
+		if strings.TrimSpace(lead.Email) != "" {
+			continue
+		}
+		profileURL := strings.TrimSpace(lead.LinkedIn)
+		if profileURL == "" {
+			continue
+		}
+		if cached, ok := linkedinEmailCache[profileURL]; ok {
+			if cached != "" {
+				lead.Email = cached
+				lead.EmailStatus = "scraped_public"
+				lead.EmailVerified = false
+				lead.Source = "linkedin"
+				lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", true)
+			}
+			continue
+		}
+		email := strings.TrimSpace(ls.linkedinParser.ExtractPublicEmailFromProfile(profileURL))
+		linkedinEmailCache[profileURL] = email
+		if email == "" {
+			continue
+		}
+		lead.Email = email
+		lead.EmailStatus = "scraped_public"
+		lead.EmailVerified = false
+		lead.Source = "linkedin"
+		lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", true)
+	}
+
 	dedupeLeadsMapByLinkedIn(leadsMap)
 
 	// Step 8: Finalise leads list
@@ -347,6 +380,13 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		if !utils.ValidateName(lead.Name) {
 			log.Printf("❌ INVALID LEAD NAME: %s", lead.Name)
 			continue
+		}
+		if strings.TrimSpace(lead.Email) == "" {
+			lead.Email = "Email Not Scraped"
+			if strings.TrimSpace(lead.EmailStatus) == "" {
+				lead.EmailStatus = "not_found"
+			}
+			lead.EmailVerified = false
 		}
 
 		lead.UserID = userID

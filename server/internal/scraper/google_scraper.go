@@ -557,6 +557,9 @@ func junkWebsiteHosts() []string {
 		"sulekha.com", "yellowpages.com", "yellowpages.ca", "mapquest.com",
 		"freelancer.com", "upwork.com", "fiverr.com", "clutch.co", "g2.com",
 		"apollo.io", "rocketreach.co",
+		"google.com", "google.co.in", "maps.google.com",
+		"goo.gl", "bit.ly", "tinyurl.com", "t.co", "lnkd.in", "rb.gy", "cutt.ly",
+		"medium.com", "substack.com", "wordpress.com", "blogspot.com",
 	}
 }
 
@@ -572,6 +575,47 @@ func isJunkWebsiteURL(link string) bool {
 		}
 	}
 	return false
+}
+
+func isOfficialWebsiteCandidate(link string) bool {
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return false
+	}
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return false
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" || !strings.Contains(host, ".") {
+		return false
+	}
+	if isJunkWebsiteURL(link) {
+		return false
+	}
+	path := strings.ToLower(strings.Trim(parsed.EscapedPath(), "/"))
+	if path == "" {
+		return true
+	}
+	// Allow common homepage aliases and language roots.
+	if path == "home" || path == "index" || path == "en" || path == "en-us" {
+		return true
+	}
+	// Exclude directory/listing/news/social pages even if host is otherwise valid.
+	blockedPathTokens := []string{
+		"linkedin", "crunchbase", "about-us-directory", "directory", "listing",
+		"news", "press", "article", "blog", "jobs", "careers", "events", "wiki",
+	}
+	for _, tok := range blockedPathTokens {
+		if strings.Contains(path, tok) {
+			return false
+		}
+	}
+	return true
 }
 
 func stripURLTrackingParams(link string) string {
@@ -618,18 +662,16 @@ func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (stri
 		return gs.fallbackWebsite(companyName), nil
 	}
 
-	queries := []string{
+	queries := []string{}
+	if location != "" {
+		queries = append(queries, fmt.Sprintf(`"%s" "%s" official site`, companyName, location))
+	}
+	queries = append(queries,
 		fmt.Sprintf(`"%s" official website`, companyName),
 		fmt.Sprintf(`%s official website`, companyName),
 		fmt.Sprintf(`%s homepage`, companyName),
 		fmt.Sprintf(`%s corporate website`, companyName),
-	}
-	if location != "" {
-		queries = append(queries,
-			fmt.Sprintf(`"%s" %s official website`, companyName, location),
-			fmt.Sprintf(`%s %s company website`, companyName, location),
-		)
-	}
+	)
 	if parts := strings.Fields(companyName); len(parts) >= 2 {
 		queries = append(queries, fmt.Sprintf(`%s company website`, parts[0]))
 	}
@@ -643,9 +685,6 @@ func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (stri
 		}
 	}
 
-	bestURL := ""
-	bestScore := -1
-
 	for _, query := range queries {
 		result, err := gs.serperGoogleSearch(query)
 		if err != nil {
@@ -653,37 +692,31 @@ func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (stri
 			time.Sleep(200 * time.Millisecond)
 			continue
 		}
+		// Pick the first clean official-site candidate from the top search results.
 		for _, item := range result.Organic {
+			link := stripURLTrackingParams(item.Link)
+			if !isOfficialWebsiteCandidate(link) {
+				continue
+			}
 			s := scoreOrganicWebsiteCandidate(companyName, location, item)
 			if s < 0 {
 				continue
 			}
+			// Keep light relevance guard to avoid similarly named companies.
+			if s < 1 {
+				continue
+			}
 			if guessLabel != "" {
-				if host := hostFromURL(item.Link); host != "" &&
+				if host := hostFromURL(link); host != "" &&
 					(strings.EqualFold(host, guessLabel) || strings.HasSuffix(strings.ToLower(host), "."+guessLabel)) {
-					s += 2
+					s += 1
 				}
 			}
-			link := stripURLTrackingParams(item.Link)
-			if s > bestScore || (s == bestScore && bestURL == "") {
-				bestScore = s
-				bestURL = link
-			}
+			finalURL := normalizeCompanyHomepageURL(link)
+			log.Printf("✓ Selected corporate website from Serper top result (score=%d): %s", s, finalURL)
+			return finalURL, nil
 		}
 		time.Sleep(200 * time.Millisecond)
-	}
-
-	const minAcceptScore = 3
-	if bestURL != "" && bestScore >= minAcceptScore {
-		finalURL := normalizeCompanyHomepageURL(bestURL)
-		log.Printf("✓ Best corporate website (score=%d): %s", bestScore, finalURL)
-		return finalURL, nil
-	}
-	if bestURL != "" {
-		log.Printf("⚠️ Low-confidence website pick (score=%d): %s — retrying with domain confirmation", bestScore, bestURL)
-		if ok := gs.confirmWebsiteWithSerper(companyName, location, bestURL); ok {
-			return normalizeCompanyHomepageURL(bestURL), nil
-		}
 	}
 
 	log.Printf("⚠️ No strong Serper website match for %q; using fallback", companyName)
