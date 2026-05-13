@@ -7,6 +7,7 @@ export interface Lead {
   id?: string;
   name: string;
   role: string;
+  matchedCategory?: string;
   email?: string;
   linkedin?: string;
   score?: number;

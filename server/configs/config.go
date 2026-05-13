@@ -33,7 +33,12 @@ type SMTPConfig struct {
 var appConfig *Config
 
 func LoadConfig() *Config {
-	_ = godotenv.Load()
+	// Load env vars from either:
+	// - server/.env (when running from repo root)
+	// - .env (when running from within server/)
+	// If neither exists, rely on process environment (Docker/CI/hosting).
+	_ = godotenv.Load("server/.env")
+	_ = godotenv.Load(".env")
 
 	appConfig = &Config{
 		MongoURI:     getEnv("MONGO_URI", "mongodb://localhost:27017"),

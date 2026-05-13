@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log"
+	"net/url"
 	"strings"
 	"time"
 
@@ -98,9 +99,9 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		log.Printf("✓ Direct domain input detected: %s", website)
 	} else {
 		var webErr error
-		website, webErr = ls.googleScraper.FindOfficialWebsite(searchTerm)
+		website, webErr = ls.googleScraper.FindOfficialWebsite(companyName, location)
 		if webErr != nil {
-			log.Printf("⚠️ FindOfficialWebsite error for %q: %v", searchTerm, webErr)
+			log.Printf("⚠️ FindOfficialWebsite error for %q: %v", companyName, webErr)
 		}
 		if strings.TrimSpace(website) == "" {
 			website = ls.googleScraper.GuessWebsiteFromCompany(companyName)
@@ -233,7 +234,13 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			if l.Name == "" {
 				continue
 			}
-			key := strings.ToLower(strings.ReplaceAll(l.Name, " ", "") + l.Role)
+			jobTitle := strings.TrimSpace(l.Role)
+			// Enriched roles can be noisy; only keep decision-making titles and attach matched category.
+			category, ok := scraper.CategorizeTitle(jobTitle)
+			if !ok {
+				continue
+			}
+			key := strings.ToLower(strings.ReplaceAll(l.Name, " ", "") + jobTitle)
 			linkedinURL := l.LinkedIn
 			if linkedinURL != "" {
 				linkedinURL = findMatchingLinkedInURL(l.Name, companyName, liRes.profiles)
@@ -241,9 +248,22 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 					linkedinURL = l.LinkedIn
 				}
 			}
+
+			// Prefer exact LinkedIn-displayed title/category from scraped data when available.
+			if scrapedTitle, scrapedCategory := findScrapedProfileTitleAndCategory(l.Name, linkedinURL, liRes.profiles); scrapedTitle != "" {
+				jobTitle = scrapedTitle
+				if scrapedCategory != "" {
+					category = scrapedCategory
+				} else if c, ok := scraper.CategorizeTitle(jobTitle); ok {
+					category = c
+				}
+				key = strings.ToLower(strings.ReplaceAll(l.Name, " ", "") + jobTitle)
+			}
+
 			leadsMap[key] = &models.Lead{
 				Name:          l.Name,
-				Role:          l.Role,
+				Role:          jobTitle, // exact job title when scraped
+				MatchedCategory: category,
 				Email:         l.Email,
 				EmailStatus:   l.EmailStatus,
 				LinkedIn:      linkedinURL,
@@ -254,7 +274,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 				Source:        l.Source,
 				EmailVerified: false,
 				SearchID:      searchObjID,
-				Score:         ls.scoringService.CalculateScore(l.Role, linkedinURL != "", l.Email != ""),
+				Score:         ls.scoringService.CalculateScore(jobTitle, linkedinURL != "", l.Email != ""),
 				CreatedAt:     time.Now(),
 				UpdatedAt:     time.Now(),
 			}
@@ -264,25 +284,32 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 	// Step 6: Fallback — raw LinkedIn profiles
 	for _, p := range liRes.profiles {
 		name := p["name"]
-		role := p["role"]
+		jobTitle := p["title"]
+		category := p["category"]
 		linkedinURL := p["url"]
 		if name == "" {
 			continue
 		}
-		key := strings.ToLower(strings.ReplaceAll(name, " ", "") + role)
+		key := strings.ToLower(strings.ReplaceAll(name, " ", "") + jobTitle)
 		if _, exists := leadsMap[key]; !exists {
+			if category == "" {
+				if c, ok := scraper.CategorizeTitle(jobTitle); ok {
+					category = c
+				}
+			}
 			leadsMap[key] = &models.Lead{
 				Name:        name,
-				Role:        role,
+				Role:        jobTitle,
+				MatchedCategory: category,
 				LinkedIn:    linkedinURL,
 				Company:     companyName,
 				Website:     website,
 				CompanyURL:  website,
-				Confidence:  ls.scoringService.CalculateScore(role, true, false),
+				Confidence:  ls.scoringService.CalculateScore(jobTitle, true, false),
 				Source:      "linkedin",
 				EmailStatus: "not_found",
 				SearchID:    searchObjID,
-				Score:       ls.scoringService.CalculateScore(role, true, false),
+				Score:       ls.scoringService.CalculateScore(jobTitle, true, false),
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
 			}
@@ -338,8 +365,8 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 	// Step 9: Leads are NOT auto-saved to database - only saved when user explicitly clicks save
 	log.Printf("⚠️ DEBUG: About to finalise search - NOT saving leads to database")
 
-	// Step 10: Update search record
-	ls.finaliseSearch(ctx, searchID, len(leads), website)
+	// Step 10: Update search record (resolved corporate URL + LinkedIn company page for auditability)
+	ls.finaliseSearch(ctx, searchID, len(leads), website, linkedinCompanyURL)
 
 	log.Printf("✅ Search complete. Returning %d leads for '%s' WITHOUT SAVING TO DATABASE", len(leads), companyName)
 
@@ -456,14 +483,22 @@ func (ls *LeadService) saveSearch(ctx context.Context, search *models.Search) (i
 	return result.InsertedID, nil
 }
 
-func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{}, count int, website string) {
+func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{}, count int, website, linkedinCompanyURL string) {
 	collection := ls.db.Instance.Collection("searches")
+	domain := ""
+	if website != "" {
+		if u, err := url.Parse(website); err == nil && u.Hostname() != "" {
+			domain = strings.ToLower(strings.TrimPrefix(u.Hostname(), "www."))
+		}
+	}
 	update := bson.M{
 		"$set": bson.M{
-			"resultsCount": count,
-			"status":       "completed",
-			"website":      website,
-			"completedAt":  time.Now(),
+			"resultsCount":         count,
+			"status":               "completed",
+			"website":              website,
+			"domain":               domain,
+			"linkedinCompanyUrl":   strings.TrimSpace(linkedinCompanyURL),
+			"completedAt":          time.Now(),
 		},
 	}
 	collection.UpdateByID(ctx, searchID, update)
@@ -482,6 +517,31 @@ func linkedInProfileSlug(raw string) string {
 	rest = strings.Split(rest, "?")[0]
 	rest = strings.Split(rest, "/")[0]
 	return strings.TrimSpace(rest)
+}
+
+func findScrapedProfileTitleAndCategory(name, linkedinURL string, profiles []map[string]string) (string, string) {
+	nameLower := strings.ToLower(strings.TrimSpace(name))
+	wantSlug := linkedInProfileSlug(linkedinURL)
+
+	// 1) Exact LinkedIn slug match
+	if wantSlug != "" {
+		for _, p := range profiles {
+			if linkedInProfileSlug(p["url"]) == wantSlug {
+				return strings.TrimSpace(p["title"]), strings.TrimSpace(p["category"])
+			}
+		}
+	}
+
+	// 2) Name match fallback
+	if nameLower != "" {
+		for _, p := range profiles {
+			if strings.ToLower(strings.TrimSpace(p["name"])) == nameLower {
+				return strings.TrimSpace(p["title"]), strings.TrimSpace(p["category"])
+			}
+		}
+	}
+
+	return "", ""
 }
 
 func rolePriority(role string) int {

@@ -46,7 +46,7 @@ server/
 
 ## Environment Variables
 
-Create `server/.env` manually (this repo currently does not include a `.env.example` file):
+Create `server/.env` (you can copy from `server/.env.example`):
 
 ```env
 MONGO_URI=mongodb://localhost:27017
@@ -55,6 +55,7 @@ SERVER_PORT=8080
 ENVIRONMENT=development
 CLIENT_URL=http://localhost:5173
 GROK_API_KEY=
+SERPER_API_KEY=
 ```
 
 ## Run Locally

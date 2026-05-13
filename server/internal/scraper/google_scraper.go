@@ -13,13 +13,16 @@ import (
 	"time"
 )
 
+// SerperOrganicItem is one organic search result from Serper.
+type SerperOrganicItem struct {
+	Title   string `json:"title"`
+	Link    string `json:"link"`
+	Snippet string `json:"snippet"`
+}
+
 // SerperResponse represents Serper API response
 type SerperResponse struct {
-	Organic []struct {
-		Title   string `json:"title"`
-		Link    string `json:"link"`
-		Snippet string `json:"snippet"`
-	} `json:"organic"`
+	Organic []SerperOrganicItem `json:"organic"`
 }
 
 // GoogleScraper handles search scraping
@@ -43,54 +46,351 @@ func NewGoogleScraper() *GoogleScraper {
 	}
 }
 
+// serperGoogleSearch executes a Google search through Serper (google.serper.dev).
+func (gs *GoogleScraper) serperGoogleSearch(query string) (SerperResponse, error) {
+	var empty SerperResponse
+	if strings.TrimSpace(gs.serperKey) == "" {
+		return empty, fmt.Errorf("SERPER_API_KEY not set")
+	}
+	payloadBytes, err := json.Marshal(map[string]string{"q": query})
+	if err != nil {
+		return empty, err
+	}
+	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return empty, err
+	}
+	req.Header.Set("X-API-KEY", gs.serperKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := gs.client.Do(req)
+	if err != nil {
+		return empty, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return empty, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return empty, fmt.Errorf("serper HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	var result SerperResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return empty, err
+	}
+	return result, nil
+}
+
+func scoreOrganicWebsiteCandidate(company, location string, item SerperOrganicItem) int {
+	if isJunkWebsiteURL(item.Link) {
+		return -1
+	}
+	score := 0
+	hay := strings.ToLower(item.Title + " " + item.Snippet)
+	co := strings.TrimSpace(strings.ToLower(company))
+	if co != "" && strings.Contains(hay, co) {
+		score += 6
+	}
+	brand := normalizeCompanyBrand(company)
+	if len(brand) >= 3 && strings.Contains(strings.ReplaceAll(hay, " ", ""), brand) {
+		score += 4
+	}
+	if strings.Contains(hay, "official") || strings.Contains(hay, "homepage") || strings.Contains(hay, "home page") {
+		score += 2
+	}
+	loc := strings.TrimSpace(location)
+	if loc != "" && len(loc) >= 3 {
+		tokens := locationTokens(loc)
+		matches := 0
+		for _, t := range tokens {
+			if len(t) >= 3 && strings.Contains(hay, t) {
+				matches++
+			}
+		}
+		// Reward at least one token match; prefer multiple matches.
+		if matches > 0 {
+			score += 3 + minInt(matches, 3)
+		} else {
+			// If the user provided a location but the snippet/title doesn't mention it at all,
+			// downrank to avoid picking an unrelated company with the same name.
+			score -= 2
+		}
+
+		// Country hint: if India is in the location tokens, slightly prefer .in domains.
+		if containsToken(tokens, "india") {
+			if host := hostFromURL(item.Link); strings.HasSuffix(host, ".in") {
+				score += 3
+			}
+		}
+	}
+	if u, err := url.Parse(item.Link); err == nil {
+		path := strings.Trim(u.Path, "/")
+		if path == "" {
+			score += 1
+		}
+	}
+	return score
+}
+
+func locationTokens(location string) []string {
+	raw := strings.ToLower(location)
+	raw = strings.ReplaceAll(raw, "|", " ")
+	raw = strings.ReplaceAll(raw, "/", " ")
+	raw = strings.ReplaceAll(raw, "-", " ")
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n'
+	})
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]bool)
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		// ignore tiny tokens
+		if len(p) < 2 {
+			continue
+		}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func containsToken(tokens []string, want string) bool {
+	want = strings.ToLower(strings.TrimSpace(want))
+	if want == "" {
+		return false
+	}
+	for _, t := range tokens {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func scoreLinkedInCompanyCandidate(companyName, domainLabel string, item SerperOrganicItem) int {
+	normalized := normalizeLinkedInCompanyPageURL(item.Link)
+	if normalized == "" {
+		return -1
+	}
+	score := 0
+	hay := strings.ToLower(item.Title + " " + item.Snippet + " " + item.Link)
+	co := strings.TrimSpace(strings.ToLower(companyName))
+	if co != "" && strings.Contains(hay, co) {
+		score += 6
+	}
+	brand := normalizeCompanyBrand(companyName)
+	if len(brand) >= 3 && strings.Contains(strings.ReplaceAll(hay, " ", ""), brand) {
+		score += 3
+	}
+	dl := strings.TrimSpace(strings.ToLower(domainLabel))
+	if dl != "" && (strings.Contains(hay, dl) || strings.Contains(strings.ToLower(item.Link), dl)) {
+		score += 4
+	}
+	return score
+}
+
+// roleSearchVariants returns broader LinkedIn/Google query phrases for a canonical role label.
+func roleSearchVariants(canonical string) []string {
+	c := strings.TrimSpace(canonical)
+	switch strings.ToLower(c) {
+	case "ceo":
+		return []string{"CEO", "Chief Executive Officer", "Chief Executive"}
+	case "cto":
+		return []string{"CTO", "Chief Technology Officer", "Chief Technical Officer"}
+	case "founder":
+		return []string{"Founder", "Co-Founder", "Co Founder", "Cofounder"}
+	case "hr head":
+		return []string{"HR Head", "Head of HR", "Head of Human Resources", "CHRO", "Chief Human Resources Officer", "VP HR", "VP Human Resources"}
+	case "head of sales":
+		return []string{"Head of Sales", "Sales Head", "VP Sales", "Vice President Sales", "Chief Revenue Officer", "CRO", "VP of Sales"}
+	case "vice president":
+		return []string{"Vice President", "VP", "V.P."}
+	default:
+		return []string{c}
+	}
+}
+
+func companyAliases(companyName, website string) []string {
+	aliases := []string{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		for _, a := range aliases {
+			if strings.EqualFold(a, s) {
+				return
+			}
+		}
+		aliases = append(aliases, s)
+	}
+
+	add(companyName)
+	if dl := primaryDomainLabelFromWebsite(website); dl != "" {
+		add(dl)
+		add(strings.ReplaceAll(dl, "-", " "))
+	}
+
+	// Compact version: iGeekTech -> igeektech (helps when snippets omit spacing/casing).
+	compact := normalizeCompanyBrand(companyName)
+	if len(compact) >= 3 {
+		add(compact)
+	}
+
+	return aliases
+}
+
+func quotedOrList(items []string) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		it = strings.TrimSpace(it)
+		if it == "" {
+			continue
+		}
+		// If already looks like a token (no spaces), don't force quotes.
+		if strings.ContainsAny(it, " \t") {
+			parts = append(parts, fmt.Sprintf("\"%s\"", it))
+		} else {
+			parts = append(parts, fmt.Sprintf("\"%s\"", it))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
+}
+
+func linkedInPeopleDiscoveryQueries(company, rolePhrase, slug string) []string {
+	company = strings.TrimSpace(company)
+	rolePhrase = strings.TrimSpace(rolePhrase)
+	slug = strings.TrimSpace(slug)
+	if rolePhrase == "" {
+		return nil
+	}
+	if slug != "" {
+		return []string{
+			fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, rolePhrase),
+			fmt.Sprintf(`site:linkedin.com/in/ "%s" linkedin.com/company/%s`, rolePhrase, slug),
+			fmt.Sprintf(`"%s" "%s" site:linkedin.com/in/`, company, rolePhrase),
+			fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, rolePhrase),
+			fmt.Sprintf(`"%s" "%s" linkedin profile`, company, rolePhrase),
+			fmt.Sprintf(`site:linkedin.com/in/ intitle:"%s" intitle:"%s"`, company, rolePhrase),
+			fmt.Sprintf(`site:linkedin.com/in/ "at %s" "%s"`, company, rolePhrase),
+			fmt.Sprintf(`site:linkedin.com/in/ "%s" %s`, rolePhrase, company),
+		}
+	}
+	return []string{
+		fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, rolePhrase),
+		fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, rolePhrase),
+		fmt.Sprintf(`"%s" "%s" linkedin profile`, company, rolePhrase),
+		fmt.Sprintf(`site:linkedin.com/in/ intitle:"%s" intitle:"%s"`, company, rolePhrase),
+		fmt.Sprintf(`site:linkedin.com/in/ "at %s" "%s"`, company, rolePhrase),
+		fmt.Sprintf(`"%s" "%s" site:linkedin.com/in/`, company, rolePhrase),
+	}
+}
+
+func linkedInPeopleDiscoveryQueriesV2(companyAliases []string, rolePhrase string, location string, slug string) []string {
+	rolePhrase = strings.TrimSpace(rolePhrase)
+	slug = strings.TrimSpace(slug)
+
+	co := quotedOrList(companyAliases)
+	role := quotedOrList([]string{rolePhrase})
+
+	// Location token help: add up to 3 most specific tokens (city/state/country)
+	locTokens := locationTokens(location)
+	locQuery := ""
+	if len(locTokens) > 0 {
+		// take first 3 tokens as provided order isn't preserved; but that's okay as OR.
+		n := minInt(3, len(locTokens))
+		locQuery = quotedOrList(locTokens[:n])
+	}
+
+	// Keep query count low: 3–4 strong ones beat 12 noisy ones.
+	queries := []string{
+		fmt.Sprintf(`site:linkedin.com/in/ %s %s %s`, co, role, locQuery),
+		fmt.Sprintf(`site:linkedin.com/in/ intitle:%s intitle:%s %s`, strings.Trim(co, "()"), strings.Trim(role, "()"), locQuery),
+		fmt.Sprintf(`%s %s site:linkedin.com/in/ %s`, co, role, locQuery),
+	}
+	if slug != "" {
+		queries = append(queries, fmt.Sprintf(`site:linkedin.com/in/ %s %s linkedin.com/company/%s %s`, co, role, slug, locQuery))
+	}
+
+	// Cleanup double spaces
+	out := make([]string, 0, len(queries))
+	for _, q := range queries {
+		q = strings.Join(strings.Fields(q), " ")
+		if q != "" {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
 // SearchLinkedInProfiles searches LinkedIn profiles (via Serper/Google). When linkedinCompanySlug is set
-// (from FindLinkedInCompanyPage), queries and snippet checks are grounded to that LinkedIn company page.
+// (from FindLinkedInCompanyPage), queries are grounded to that org. We mimic “company people” discovery using
+// indexed public profile pages (LinkedIn’s /company/.../people UI is not reliably scrapable without auth).
 func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedinCompanySlug string) ([]map[string]string, error) {
 	company = strings.TrimSpace(company)
 	role = strings.TrimSpace(role)
 	location = strings.TrimSpace(location)
 	slug := strings.TrimSpace(linkedinCompanySlug)
 
-	var queries []string
 	if role != "" {
-		if slug != "" {
-			queries = append(queries,
-				fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
-				fmt.Sprintf(`site:linkedin.com/in/ "%s" linkedin.com/company/%s`, role, slug),
-				fmt.Sprintf(`"%s" "%s" site:linkedin.com/in/`, company, role),
-				fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
-				fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
-			)
-		} else {
-			queries = []string{
-				fmt.Sprintf(`site:linkedin.com/in/ "%s" "%s"`, company, role),
-				fmt.Sprintf(`site:linkedin.com/in/ %s %s`, company, role),
-				fmt.Sprintf(`"%s" "%s" linkedin profile`, company, role),
+		aliases := companyAliases(company, "")
+		for _, rolePhrase := range roleSearchVariants(role) {
+			queries := linkedInPeopleDiscoveryQueriesV2(aliases, rolePhrase, location, slug)
+			for _, q := range queries {
+				log.Printf("========================================")
+				log.Printf("LINKEDIN PEOPLE SEARCH (Serper)")
+				log.Printf("COMPANY => %s", company)
+				log.Printf("ROLE (canonical) => %s | phrase => %s", role, rolePhrase)
+				if location != "" {
+					log.Printf("LOCATION => %s", location)
+				}
+				log.Printf("QUERY => %s", q)
+				log.Printf("========================================")
+
+				results, err := gs.searchViaSerper(q, role, company, location, slug)
+				if err == nil && len(results) > 0 {
+					return results, nil
+				}
+				time.Sleep(300 * time.Millisecond)
 			}
 		}
+		return []map[string]string{}, nil
+	}
+
+	var queries []string
+	if slug != "" {
+		queries = append(queries,
+			fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
+			fmt.Sprintf(`site:linkedin.com/in/ linkedin.com/company/%s`, slug),
+			fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
+		)
 	} else {
-		if slug != "" {
-			queries = append(queries,
-				fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
-				fmt.Sprintf(`site:linkedin.com/in/ linkedin.com/company/%s`, slug),
-				fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
-			)
-		} else {
-			queries = []string{
-				fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
-				fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
-			}
+		queries = []string{
+			fmt.Sprintf(`site:linkedin.com/in/ "%s"`, company),
+			fmt.Sprintf(`site:linkedin.com/in/ %s`, company),
 		}
 	}
 
 	for _, q := range queries {
-		log.Printf("========================================")
-		log.Printf("LINKEDIN SEARCH START")
-		log.Printf("COMPANY => %s", company)
-		log.Printf("ROLE => %s", role)
-		log.Printf("QUERY => %s", q)
-		log.Printf("========================================")
-
+		log.Printf("LINKEDIN SEARCH START (no role) QUERY => %s", q)
 		results, err := gs.searchViaSerper(q, role, company, location, slug)
 		if err == nil && len(results) > 0 {
 			return results, nil
@@ -103,36 +403,11 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedi
 // searchViaSerper uses Serper API
 func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locationHint, linkedinCompanySlug string) ([]map[string]string, error) {
 	linkedinCompanySlug = strings.TrimSpace(linkedinCompanySlug)
-	payloadBytes, err := json.Marshal(map[string]string{"q": query})
+	result, err := gs.serperGoogleSearch(query)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("X-API-KEY", gs.serperKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := gs.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Printf("SERPER RESPONSE: %s", string(body))
-
-	var result SerperResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
+	log.Printf("SERPER organic results: %d (query=%q)", len(result.Organic), query)
 
 	var profiles []map[string]string
 	seen := make(map[string]bool)
@@ -169,21 +444,108 @@ func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locat
 			name = extractNameFromSnippet(item.Snippet, item.Title)
 		}
 
-		detectedRole := role
-		if detectedRole == "" {
-			detectedRole = extractRoleFromText(item.Title + " " + item.Snippet)
+		text := item.Title + " " + item.Snippet
+
+		aliases := companyAliases(companyForSlugCheck, "")
+		jobTitle := ExtractJobTitleFromSerperTitle(item.Title, aliases)
+		if jobTitle == "" {
+			// fall back to what the snippet says
+			jobTitle = strings.TrimSpace(matchRoleFromText(text, roleSearchVariants(role)))
+		}
+		if jobTitle == "" {
+			jobTitle = extractRoleFromText(text)
+		}
+
+		category, ok := CategorizeTitle(jobTitle + " " + text)
+		if !ok {
+			continue
 		}
 
 		profiles = append(profiles, map[string]string{
-			"url":     link,
-			"name":    name,
-			"role":    detectedRole,
-			"context": item.Snippet,
+			"url":      link,
+			"name":     name,
+			"title":    jobTitle,
+			"category": category,
+			"context":  item.Snippet,
 		})
 	}
 
 	log.Printf("✅ SERPER PROFILES FOUND: %d", len(profiles))
 	return profiles, nil
+}
+
+func normalizeRoleText(s string) string {
+	s = strings.ToLower(s)
+	// Replace common punctuation with spaces to make matching less brittle.
+	repl := strings.NewReplacer(
+		".", " ",
+		",", " ",
+		"|", " ",
+		"·", " ",
+		"•", " ",
+		"—", " ",
+		"–", " ",
+		"(", " ",
+		")", " ",
+		"[", " ",
+		"]", " ",
+		"{", " ",
+		"}", " ",
+		":", " ",
+		";", " ",
+		"/", " ",
+		"\\", " ",
+	)
+	s = repl.Replace(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func matchRoleFromText(text string, variants []string) string {
+	hay := " " + normalizeRoleText(text) + " "
+
+	best := ""
+	bestLen := -1
+
+	for _, v := range variants {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		needle := " " + normalizeRoleText(v) + " "
+		if strings.Contains(hay, needle) {
+			// Pick the most specific (longest) matching variant.
+			if len(v) > bestLen {
+				best = v
+				bestLen = len(v)
+			}
+			continue
+		}
+
+		// Special-case common abbreviations.
+		vl := strings.ToLower(v)
+		if vl == "vp" || vl == "v p" || vl == "v.p." || vl == "v.p" {
+			if strings.Contains(hay, " vp ") || strings.Contains(hay, " vice president ") {
+				if len(v) > bestLen {
+					best = "Vice President"
+					bestLen = len(best)
+				}
+			}
+		}
+	}
+
+	// Normalize some variants to the UI-friendly display we want.
+	switch strings.ToLower(strings.TrimSpace(best)) {
+	case "chief executive officer", "chief executive":
+		return "CEO"
+	case "chief technology officer", "chief technical officer":
+		return "CTO"
+	case "chief human resources officer", "chro":
+		return "Head of HR"
+	case "chief revenue officer", "cro":
+		return "Head of Sales"
+	}
+
+	return best
 }
 
 func junkWebsiteHosts() []string {
@@ -193,6 +555,8 @@ func junkWebsiteHosts() []string {
 		"wikipedia.org", "youtube.com", "yelp.com", "zoominfo.com", "dnb.com", "owler.com",
 		"indiamart.com", "tradeindia.com", "exportersindia.com", "justdial.com",
 		"sulekha.com", "yellowpages.com", "yellowpages.ca", "mapquest.com",
+		"freelancer.com", "upwork.com", "fiverr.com", "clutch.co", "g2.com",
+		"apollo.io", "rocketreach.co",
 	}
 }
 
@@ -220,87 +584,147 @@ func stripURLTrackingParams(link string) string {
 	return parsed.String()
 }
 
+// normalizeCompanyHomepageURL returns scheme + host + trailing slash.
+// This ensures we store official company URL, not deep listing/profile pages.
+func normalizeCompanyHomepageURL(link string) string {
+	parsed, err := url.Parse(strings.TrimSpace(link))
+	if err != nil || parsed.Hostname() == "" {
+		return strings.TrimSpace(link)
+	}
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return scheme + "://" + host + "/"
+}
+
 // GuessWebsiteFromCompany returns https://{slug}.com from a company name (best-effort when Serper fails).
 func (gs *GoogleScraper) GuessWebsiteFromCompany(company string) string {
 	return gs.fallbackWebsite(company)
 }
 
-// FindOfficialWebsite searches official company website
-func (gs *GoogleScraper) FindOfficialWebsite(company string) (string, error) {
-	company = strings.TrimSpace(company)
-	if company == "" {
+// FindOfficialWebsite uses Serper (Google) to resolve the corporate site from the company name.
+// location is optional context (city/state/country) to disambiguate common names.
+func (gs *GoogleScraper) FindOfficialWebsite(companyName, location string) (string, error) {
+	companyName = strings.TrimSpace(companyName)
+	location = strings.TrimSpace(location)
+	if companyName == "" {
 		return "", nil
 	}
 
 	if strings.TrimSpace(gs.serperKey) == "" {
 		log.Printf("⚠️ SERPER_API_KEY missing; guessing website from company string")
-		return gs.fallbackWebsite(company), nil
+		return gs.fallbackWebsite(companyName), nil
 	}
 
 	queries := []string{
-		fmt.Sprintf(`"%s" official website`, company),
-		fmt.Sprintf(`%s official website`, company),
+		fmt.Sprintf(`"%s" official website`, companyName),
+		fmt.Sprintf(`%s official website`, companyName),
+		fmt.Sprintf(`%s homepage`, companyName),
+		fmt.Sprintf(`%s corporate website`, companyName),
 	}
-	if parts := strings.Fields(company); len(parts) >= 1 && parts[0] != company {
+	if location != "" {
+		queries = append(queries,
+			fmt.Sprintf(`"%s" %s official website`, companyName, location),
+			fmt.Sprintf(`%s %s company website`, companyName, location),
+		)
+	}
+	if parts := strings.Fields(companyName); len(parts) >= 2 {
 		queries = append(queries, fmt.Sprintf(`%s company website`, parts[0]))
 	}
 
-	var lastStatus int
+	guess := gs.fallbackWebsite(companyName)
+	guessLabel := ""
+	if u, err := url.Parse(guess); err == nil && u.Hostname() != "" {
+		guessLabel = strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+		if guessLabel != "" {
+			queries = append(queries, fmt.Sprintf(`site:%s %s`, guessLabel, companyName))
+		}
+	}
+
+	bestURL := ""
+	bestScore := -1
 
 	for _, query := range queries {
-		payloadBytes, err := json.Marshal(map[string]string{"q": query})
+		result, err := gs.serperGoogleSearch(query)
 		if err != nil {
+			log.Printf("⚠️ Serper website search error: %v", err)
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
-
-		req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
-		if err != nil {
-			continue
-		}
-
-		req.Header.Set("X-API-KEY", gs.serperKey)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := gs.client.Do(req)
-		if err != nil {
-			log.Printf("⚠️ Serper website search request error: %v", err)
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		lastStatus = resp.StatusCode
-
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("⚠️ Serper website search HTTP %d", resp.StatusCode)
-			continue
-		}
-
-		var result SerperResponse
-		if err := json.Unmarshal(body, &result); err != nil {
-			log.Printf("⚠️ Serper website JSON parse error: %v", err)
-			continue
-		}
-
 		for _, item := range result.Organic {
-			link := item.Link
-			if isJunkWebsiteURL(link) {
+			s := scoreOrganicWebsiteCandidate(companyName, location, item)
+			if s < 0 {
 				continue
 			}
-			return stripURLTrackingParams(link), nil
+			if guessLabel != "" {
+				if host := hostFromURL(item.Link); host != "" &&
+					(strings.EqualFold(host, guessLabel) || strings.HasSuffix(strings.ToLower(host), "."+guessLabel)) {
+					s += 2
+				}
+			}
+			link := stripURLTrackingParams(item.Link)
+			if s > bestScore || (s == bestScore && bestURL == "") {
+				bestScore = s
+				bestURL = link
+			}
 		}
-
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	if lastStatus != 0 && lastStatus != http.StatusOK {
-		log.Printf("⚠️ Using guessed website after Serper HTTP %d", lastStatus)
+	const minAcceptScore = 3
+	if bestURL != "" && bestScore >= minAcceptScore {
+		finalURL := normalizeCompanyHomepageURL(bestURL)
+		log.Printf("✓ Best corporate website (score=%d): %s", bestScore, finalURL)
+		return finalURL, nil
+	}
+	if bestURL != "" {
+		log.Printf("⚠️ Low-confidence website pick (score=%d): %s — retrying with domain confirmation", bestScore, bestURL)
+		if ok := gs.confirmWebsiteWithSerper(companyName, location, bestURL); ok {
+			return normalizeCompanyHomepageURL(bestURL), nil
+		}
 	}
 
-	return gs.fallbackWebsite(company), nil
+	log.Printf("⚠️ No strong Serper website match for %q; using fallback", companyName)
+	if guess != "" {
+		return normalizeCompanyHomepageURL(guess), nil
+	}
+	return "", nil
 }
 
-// FindLinkedInCompanyPage discovers linkedin.com/company/{slug}/ via Serper after the corporate website is known.
+func hostFromURL(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
+}
+
+func (gs *GoogleScraper) confirmWebsiteWithSerper(companyName, location, website string) bool {
+	host := hostFromURL(website)
+	if host == "" {
+		return false
+	}
+	q := fmt.Sprintf(`site:%s "%s"`, host, companyName)
+	if location != "" {
+		q = fmt.Sprintf(`site:%s "%s" %s`, host, companyName, location)
+	}
+	result, err := gs.serperGoogleSearch(q)
+	if err != nil {
+		return false
+	}
+	for _, item := range result.Organic {
+		if strings.Contains(strings.ToLower(item.Link), host) &&
+			scoreOrganicWebsiteCandidate(companyName, location, item) >= 0 {
+			return true
+		}
+	}
+	return len(result.Organic) > 0
+}
+
+// FindLinkedInCompanyPage discovers linkedin.com/company/{slug}/ via Serper, using company name plus the
+// resolved corporate website (domain label) to pick the best-matching org page.
 func (gs *GoogleScraper) FindLinkedInCompanyPage(companyName, website string) (string, error) {
 	companyName = strings.TrimSpace(companyName)
 	if companyName == "" {
@@ -311,49 +735,54 @@ func (gs *GoogleScraper) FindLinkedInCompanyPage(companyName, website string) (s
 		return "", nil
 	}
 
+	domainLabel := primaryDomainLabelFromWebsite(website)
 	queries := []string{
 		fmt.Sprintf(`site:linkedin.com/company "%s"`, companyName),
 		fmt.Sprintf(`"%s" site:linkedin.com/company`, companyName),
+		fmt.Sprintf(`"%s" linkedin company page`, companyName),
 	}
-	if lbl := primaryDomainLabelFromWebsite(website); lbl != "" {
-		queries = append(queries, fmt.Sprintf(`site:linkedin.com/company %s`, lbl))
+	if domainLabel != "" {
+		queries = append(queries,
+			fmt.Sprintf(`site:linkedin.com/company %s`, domainLabel),
+			fmt.Sprintf(`site:linkedin.com/company "%s" %s`, companyName, domainLabel),
+			fmt.Sprintf(`linkedin.com/company %s %s`, domainLabel, companyName),
+		)
 	}
+
+	bestURL := ""
+	bestScore := -1
 
 	for _, query := range queries {
-		payloadBytes, err := json.Marshal(map[string]string{"q": query})
-		if err != nil {
-			continue
-		}
-		req, err := http.NewRequest("POST", "https://google.serper.dev/search", strings.NewReader(string(payloadBytes)))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("X-API-KEY", gs.serperKey)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := gs.client.Do(req)
+		result, err := gs.serperGoogleSearch(query)
 		if err != nil {
 			log.Printf("⚠️ Serper LinkedIn company search error: %v", err)
-			continue
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("⚠️ Serper LinkedIn company search HTTP %d", resp.StatusCode)
-			continue
-		}
-		var result SerperResponse
-		if err := json.Unmarshal(body, &result); err != nil {
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
 		for _, item := range result.Organic {
-			normalized := normalizeLinkedInCompanyPageURL(item.Link)
-			if normalized != "" {
-				log.Printf("✓ LinkedIn company page via Serper: %s", normalized)
-				return normalized, nil
+			s := scoreLinkedInCompanyCandidate(companyName, domainLabel, item)
+			if s < 0 {
+				continue
+			}
+			norm := normalizeLinkedInCompanyPageURL(item.Link)
+			if norm == "" {
+				continue
+			}
+			if s > bestScore || (s == bestScore && bestURL == "") {
+				bestScore = s
+				bestURL = norm
 			}
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+
+	if bestURL != "" && bestScore >= 4 {
+		log.Printf("✓ LinkedIn company page (score=%d): %s", bestScore, bestURL)
+		return bestURL, nil
+	}
+	if bestURL != "" && bestScore >= 2 {
+		log.Printf("✓ LinkedIn company page (lower confidence score=%d): %s", bestScore, bestURL)
+		return bestURL, nil
 	}
 	log.Printf("⚠️ No LinkedIn company page found via Serper for %q", companyName)
 	return "", nil
@@ -410,7 +839,7 @@ func normalizeLinkedInCompanyPageURL(raw string) string {
 
 // SearchCompanyLeadership searches leadership profiles
 func (gs *GoogleScraper) SearchCompanyLeadership(company, location, linkedinCompanySlug string) ([]map[string]string, error) {
-	query := fmt.Sprintf(`site:linkedin.com/in/ "%s" CEO OR CTO OR Founder OR HR`, company)
+	query := fmt.Sprintf(`site:linkedin.com/in/ "%s" (CEO OR CTO OR Founder OR "Head of Sales" OR "Vice President" OR "VP" OR CHRO OR "Head of HR")`, company)
 	return gs.searchViaSerper(query, "", strings.TrimSpace(company), strings.TrimSpace(location), strings.TrimSpace(linkedinCompanySlug))
 }
 
@@ -638,10 +1067,14 @@ func extractNameFromSnippet(snippet, title string) string {
 
 func extractRoleFromText(text string) string {
 	roles := []string{
-		"CEO", "CTO", "CFO", "COO", "Founder", "HR",
-		"Head of HR", "VP Engineering", "Engineering Manager",
-		"Managing Director", "MD", "Director", "Partner", "Principal", "Co-Founder",
-		"Head of Engineering", "Head of Product", "Head of Marketing",
+		"Chief Executive Officer", "Chief Technology Officer", "Chief Human Resources Officer",
+		"Chief Revenue Officer", "Vice President", "Co-Founder",
+		"CEO", "CTO", "CFO", "COO", "Founder", "CHRO", "CRO",
+		"Head of Sales", "Head of HR", "Head of Human Resources",
+		"VP Sales", "VP Human Resources", "VP HR", "VP",
+		"HR", "Head of Engineering", "VP Engineering", "Engineering Manager",
+		"Managing Director", "MD", "Director", "Partner", "Principal",
+		"Head of Product", "Head of Marketing",
 	}
 
 	lower := strings.ToLower(text)

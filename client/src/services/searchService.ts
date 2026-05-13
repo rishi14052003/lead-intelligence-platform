@@ -3,7 +3,9 @@ import api from "./api";
 export interface Lead {
   id?: string;
   name: string;
+  // role is the displayed job title (e.g. "Founder & CEO")
   role: string;
+  matchedCategory?: string;
   email?: string;
   linkedin?: string;
   score?: number;

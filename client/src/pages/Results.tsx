@@ -169,27 +169,35 @@ export default function Results() {
     return () => clearTimeout(timer);
   }, [filter, leads.length]);
 
-  const roles = ["All", "CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"];
+  const roles = [
+    "All",
+    "FOUNDERS & OWNERSHIP",
+    "TECH & PRODUCT LEADERSHIP",
+    "HR & RECRUITMENT",
+    "SALES & BUSINESS DEVELOPMENT",
+    "MARKETING & OPERATIONS",
+  ];
 
-  const getRolePriority = (role: string): number => {
-    if (!role) return 999;
-    const r = role.toLowerCase().trim();
-    if (r.includes("ceo") || r === "chief executive officer") return 1;
-    if (r.includes("cto") || r === "chief technology officer") return 2;
-    if (r.includes("chief") || r.includes("c-level")) return 3;
-    if (r.includes("founder")) return 4;
-    if (r.includes("president") || r.includes("vice president")) return 5;
-    if (r.includes("head") || r.includes("director")) return 6;
-    if (r.includes("manager")) return 7;
-    return 8;
+  const getLeadPriority = (category: string | undefined, jobTitle: string): number => {
+    const c = (category || "").toLowerCase().trim();
+    const t = (jobTitle || "").toLowerCase().trim();
+    // Prefer exec ownership titles first, then tech, then revenue/ops.
+    if (t.includes("founder") || t.includes("owner") || t.includes("ceo") || t.includes("chief executive")) return 1;
+    if (t.includes("cto") || t.includes("chief technology") || c.includes("tech")) return 2;
+    if (c.includes("sales") || t.includes("cro") || t.includes("revenue")) return 3;
+    if (c.includes("hr") || t.includes("talent") || t.includes("recruit")) return 4;
+    if (c.includes("marketing") || t.includes("operations") || t.includes("coo") || t.includes("strategy")) return 5;
+    return 9;
   };
 
   const filtered =
     filter === "All"
-      ? leads.slice().sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role))
+      ? leads
+          .slice()
+          .sort((a, b) => getLeadPriority(a.matchedCategory, a.role) - getLeadPriority(b.matchedCategory, b.role))
       : leads
-          .filter((l) => l.role === filter)
-          .sort((a, b) => getRolePriority(a.role) - getRolePriority(b.role));
+          .filter((l) => (l.matchedCategory || "") === filter)
+          .sort((a, b) => getLeadPriority(a.matchedCategory, a.role) - getLeadPriority(b.matchedCategory, b.role));
 
   const isLeadSaved = (lead: Lead) => savedLeadSignatures.has(getLeadSignature(lead));
 
@@ -396,7 +404,7 @@ export default function Results() {
                 <thead>
                   <tr>
                     <th style={{ width: "20%" }}>Name</th>
-                    <th style={{ width: "15%" }}>Role</th>
+                    <th style={{ width: "20%" }}>Job Title</th>
                     <th style={{ width: "20%" }}>Email</th>
                     <th style={{ width: "15%" }}>LinkedIn</th>
                     <th style={{ width: "20%" }}>Company URL</th>
@@ -410,7 +418,7 @@ export default function Results() {
                         <div className="lead-name">{sanitizeName(lead.name)}</div>
                       </td>
                       <td>
-                        <span className="badge badge-purple">{lead.role}</span>
+                        <span className="badge badge-purple">{lead.role || "-"}</span>
                       </td>
                       <td>
                         {lead.email ? (

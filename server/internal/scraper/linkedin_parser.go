@@ -13,7 +13,7 @@ type LinkedInParser struct {
 
 // NewLinkedInParser creates a new LinkedIn parser instance
 func NewLinkedInParser() *LinkedInParser {
-	return &LinkedInParser{	
+	return &LinkedInParser{
 		googleScraper: NewGoogleScraper(),
 	}
 }
@@ -39,7 +39,8 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 
 		name := strings.TrimSpace(p["name"])
 		url := strings.TrimSpace(p["url"])
-		detectedRole := strings.TrimSpace(p["role"])
+		jobTitle := strings.TrimSpace(p["title"])
+		category := strings.TrimSpace(p["category"])
 
 		if url == "" {
 			log.Printf("❌ EMPTY URL")
@@ -69,16 +70,23 @@ func (lp *LinkedInParser) SearchLinkedInByRoleWithValidation(company string, rol
 			continue
 		}
 
-		if detectedRole == "" {
-			detectedRole = role
+		if jobTitle == "" {
+			jobTitle = role
+		}
+		if category == "" {
+			// best-effort categorize if upstream didn't set it
+			if c, ok := CategorizeTitle(jobTitle); ok {
+				category = c
+			}
 		}
 
-		log.Printf("✅ VALID PROFILE: NAME=%s ROLE=%s URL=%s", name, detectedRole, url)
+		log.Printf("✅ VALID PROFILE: NAME=%s TITLE=%s CATEGORY=%s URL=%s", name, jobTitle, category, url)
 
 		validated = append(validated, map[string]string{
 			"name": name,
 			"url":  url,
-			"role": detectedRole,
+			"title":    jobTitle,
+			"category": category,
 		})
 	}
 
