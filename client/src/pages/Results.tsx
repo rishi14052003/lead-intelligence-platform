@@ -9,6 +9,7 @@ import { getSavedLeads } from "../services/leadService";
 import Dialog from "../components/Dialog";
 import ExportDropdown from "../components/ExportDropdown";
 import SearchProgress from "../components/feedback/SearchProgress";
+import SkeletonLoader from "../components/feedback/SkeletonLoader";
 import { exportToExcel, exportToPDF, exportToWord } from "../utils/exportUtils";
 import type { Lead } from "../services/searchService";
 
@@ -397,6 +398,22 @@ export default function Results() {
           </div>
         </div>
 
+        {/* Show loading state with partial results */}
+        {loading && leads.length > 0 && (
+          <div className="partial-results-header">
+            <div>
+              <h3>📊 Partial Results Found</h3>
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+                {leads.length} lead{leads.length !== 1 ? "s" : ""} found so far. Search is still running...
+              </p>
+            </div>
+            <div className="loading-indicator">
+              <div className="spinner-mini"></div>
+              <span>Searching...</span>
+            </div>
+          </div>
+        )}
+
         {filtered.length > 0 ? (
           <>
             <div className="table-wrap" style={{ tableLayout: "fixed", flex: 1, overflowY: "auto" } as React.CSSProperties}>
@@ -506,7 +523,35 @@ export default function Results() {
                 </button>
               </div>
             </div>
+
+            {/* Show skeleton loader while search is ongoing */}
+            {loading && (
+              <div style={{ padding: "1.5rem 0", borderTop: "1px solid var(--color-border)" }}>
+                <div style={{ marginBottom: "1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+                  <div className="loading-dots">
+                    <span>Loading more results</span>
+                    <span className="loading-dot"></span>
+                    <span className="loading-dot"></span>
+                    <span className="loading-dot"></span>
+                  </div>
+                </div>
+                <SkeletonLoader count={3} variant="row" />
+              </div>
+            )}
           </>
+        ) : loading ? (
+          // Show skeleton loader if no results yet but still loading
+          <div style={{ padding: "1.5rem" }}>
+            <div style={{ marginBottom: "1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+              <div className="loading-dots">
+                <span>Searching for leads</span>
+                <span className="loading-dot"></span>
+                <span className="loading-dot"></span>
+                <span className="loading-dot"></span>
+              </div>
+            </div>
+            <SkeletonLoader count={5} variant="row" />
+          </div>
         ) : (
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "400px" }}>
             <EmptyState title="No leads match this filter" subtitle="Try a different role filter." />

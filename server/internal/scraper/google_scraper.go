@@ -369,7 +369,7 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedi
 				if err == nil && len(results) > 0 {
 					return results, nil
 				}
-				time.Sleep(300 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond) // CHANGE #4: Reduced from 300ms
 			}
 		}
 		return []map[string]string{}, nil
@@ -395,7 +395,7 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedi
 		if err == nil && len(results) > 0 {
 			return results, nil
 		}
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // CHANGE #4: Reduced from 300ms
 	}
 	return []map[string]string{}, nil
 }

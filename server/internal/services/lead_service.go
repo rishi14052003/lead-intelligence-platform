@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"lead-finder/configs"
@@ -132,20 +133,52 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 
 	go func() {
 		var allProfiles []map[string]string
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+
 		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
+		semaphore := make(chan struct{}, 4) // Limit to 4 concurrent requests
+		successThreshold := 5
+		done := false
+
+		// CHANGE #1: Parallel LinkedIn role searches with early exit
 		for _, role := range roles {
-			profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, role, location, linkedinCompanySlug)
-			log.Printf("DEBUG ROLE=%s PROFILES=%+v ERROR=%v", role, profiles, err)
-			if err != nil {
-				log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, role, err)
-				continue
+			mu.Lock()
+			if done {
+				mu.Unlock()
+				break
 			}
-			if len(profiles) > 0 {
-				log.Printf("✓ Found %d LinkedIn profiles for role: %s", len(profiles), role)
-				allProfiles = append(allProfiles, profiles...)
-			}
+			mu.Unlock()
+
+			wg.Add(1)
+			go func(r string) {
+				defer wg.Done()
+				semaphore <- struct{}{}        // Acquire
+				defer func() { <-semaphore }() // Release
+
+				profiles, err := ls.linkedinParser.SearchLinkedInByRoleWithValidation(companyName, r, location, linkedinCompanySlug)
+				if err != nil {
+					log.Printf("⚠️ LinkedIn search for %s %s: %v", companyName, r, err)
+					return
+				}
+
+				if len(profiles) > 0 {
+					mu.Lock()
+					log.Printf("✓ Found %d LinkedIn profiles for role: %s", len(profiles), r)
+					allProfiles = append(allProfiles, profiles...)
+					if len(allProfiles) >= successThreshold {
+						log.Printf("✓ Reached threshold (%d profiles), skipping remaining role searches", len(allProfiles))
+						done = true
+					}
+					mu.Unlock()
+				}
+			}(role)
 		}
-		if len(allProfiles) == 0 {
+
+		wg.Wait()
+
+		// CHANGE #2: Skip fallback searches if we got enough profiles
+		if len(allProfiles) < 3 {
 			leadership, err := ls.googleScraper.SearchCompanyLeadership(companyName, location, linkedinCompanySlug)
 			if err != nil {
 				log.Printf("⚠️ Leadership fallback search: %v", err)
@@ -154,7 +187,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 				allProfiles = append(allProfiles, leadership...)
 			}
 		}
-		if len(allProfiles) == 0 {
+		if len(allProfiles) < 3 {
 			generic, err := ls.googleScraper.SearchLinkedInProfiles(companyName, "", location, linkedinCompanySlug)
 			if err != nil {
 				log.Printf("⚠️ Generic LinkedIn fallback: %v", err)
@@ -172,6 +205,15 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			return
 		}
 		domain := utils.FormatDomain(website)
+
+		// CHANGE #5: Check cache first
+		cached, err := ls.getCachedWebsiteScrape(ctx, domain)
+		if err == nil && cached != nil {
+			log.Printf("✓ Using cached website scrape for %s", domain)
+			websiteChan <- websiteResult{result: cached}
+			return
+		}
+
 		result, err := ls.webScraper.ScrapeCompanyWebsite(domain)
 		if err != nil {
 			log.Printf("⚠️ Website scraping failed: %v", err)
@@ -179,6 +221,12 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			return
 		}
 		log.Printf("✓ Scraped %d website pages", len(result.Pages))
+
+		// Cache the result
+		if err := ls.cacheWebsiteScrape(ctx, domain, result); err != nil {
+			log.Printf("⚠️ Failed to cache website scrape: %v", err)
+		}
+
 		websiteChan <- websiteResult{result: result}
 	}()
 
@@ -261,22 +309,22 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 			}
 
 			leadsMap[key] = &models.Lead{
-				Name:          l.Name,
-				Role:          jobTitle, // exact job title when scraped
+				Name:            l.Name,
+				Role:            jobTitle, // exact job title when scraped
 				MatchedCategory: category,
-				Email:         l.Email,
-				EmailStatus:   l.EmailStatus,
-				LinkedIn:      linkedinURL,
-				Company:       companyName,
-				Website:       website,
-				CompanyURL:    website,
-				Confidence:    l.Confidence,
-				Source:        l.Source,
-				EmailVerified: false,
-				SearchID:      searchObjID,
-				Score:         ls.scoringService.CalculateScore(jobTitle, linkedinURL != "", l.Email != ""),
-				CreatedAt:     time.Now(),
-				UpdatedAt:     time.Now(),
+				Email:           l.Email,
+				EmailStatus:     l.EmailStatus,
+				LinkedIn:        linkedinURL,
+				Company:         companyName,
+				Website:         website,
+				CompanyURL:      website,
+				Confidence:      l.Confidence,
+				Source:          l.Source,
+				EmailVerified:   false,
+				SearchID:        searchObjID,
+				Score:           ls.scoringService.CalculateScore(jobTitle, linkedinURL != "", l.Email != ""),
+				CreatedAt:       time.Now(),
+				UpdatedAt:       time.Now(),
 			}
 		}
 	}
@@ -298,20 +346,20 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 				}
 			}
 			leadsMap[key] = &models.Lead{
-				Name:        name,
-				Role:        jobTitle,
+				Name:            name,
+				Role:            jobTitle,
 				MatchedCategory: category,
-				LinkedIn:    linkedinURL,
-				Company:     companyName,
-				Website:     website,
-				CompanyURL:  website,
-				Confidence:  ls.scoringService.CalculateScore(jobTitle, true, false),
-				Source:      "linkedin",
-				EmailStatus: "not_found",
-				SearchID:    searchObjID,
-				Score:       ls.scoringService.CalculateScore(jobTitle, true, false),
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
+				LinkedIn:        linkedinURL,
+				Company:         companyName,
+				Website:         website,
+				CompanyURL:      website,
+				Confidence:      ls.scoringService.CalculateScore(jobTitle, true, false),
+				Source:          "linkedin",
+				EmailStatus:     "not_found",
+				SearchID:        searchObjID,
+				Score:           ls.scoringService.CalculateScore(jobTitle, true, false),
+				CreatedAt:       time.Now(),
+				UpdatedAt:       time.Now(),
 			}
 		}
 	}
@@ -335,9 +383,13 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		}
 	}
 
-	// Step 7b: Best-effort LinkedIn public contact email extraction.
+	// Step 7b: Best-effort LinkedIn public contact email extraction (CHANGE #3: Batch extraction).
 	// This works only when LinkedIn exposes an email on the public page.
 	linkedinEmailCache := make(map[string]string)
+	var emailLock sync.Mutex
+	var emailWg sync.WaitGroup
+	emailSemaphore := make(chan struct{}, 3) // Limit to 3 concurrent email extractions
+
 	for _, lead := range leadsMap {
 		if strings.TrimSpace(lead.Email) != "" {
 			continue
@@ -346,27 +398,43 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		if profileURL == "" {
 			continue
 		}
-		if cached, ok := linkedinEmailCache[profileURL]; ok {
-			if cached != "" {
-				lead.Email = cached
-				lead.EmailStatus = "scraped_public"
-				lead.EmailVerified = false
-				lead.Source = "linkedin"
-				lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", true)
+
+		emailWg.Add(1)
+		go func(url string, leadPtr *models.Lead) {
+			defer emailWg.Done()
+			emailSemaphore <- struct{}{}        // Acquire
+			defer func() { <-emailSemaphore }() // Release
+
+			emailLock.Lock()
+			if cached, ok := linkedinEmailCache[url]; ok {
+				emailLock.Unlock()
+				if cached != "" {
+					leadPtr.Email = cached
+					leadPtr.EmailStatus = "scraped_public"
+					leadPtr.EmailVerified = false
+					leadPtr.Source = "linkedin"
+					leadPtr.Score = ls.scoringService.CalculateScore(leadPtr.Role, leadPtr.LinkedIn != "", true)
+				}
+				return
 			}
-			continue
-		}
-		email := strings.TrimSpace(ls.linkedinParser.ExtractPublicEmailFromProfile(profileURL))
-		linkedinEmailCache[profileURL] = email
-		if email == "" {
-			continue
-		}
-		lead.Email = email
-		lead.EmailStatus = "scraped_public"
-		lead.EmailVerified = false
-		lead.Source = "linkedin"
-		lead.Score = ls.scoringService.CalculateScore(lead.Role, lead.LinkedIn != "", true)
+			emailLock.Unlock()
+
+			email := strings.TrimSpace(ls.linkedinParser.ExtractPublicEmailFromProfile(url))
+
+			emailLock.Lock()
+			linkedinEmailCache[url] = email
+			if email != "" {
+				leadPtr.Email = email
+				leadPtr.EmailStatus = "scraped_public"
+				leadPtr.EmailVerified = false
+				leadPtr.Source = "linkedin"
+				leadPtr.Score = ls.scoringService.CalculateScore(leadPtr.Role, leadPtr.LinkedIn != "", true)
+			}
+			emailLock.Unlock()
+		}(profileURL, lead)
 	}
+
+	emailWg.Wait()
 
 	dedupeLeadsMapByLinkedIn(leadsMap)
 
@@ -533,12 +601,12 @@ func (ls *LeadService) finaliseSearch(ctx context.Context, searchID interface{},
 	}
 	update := bson.M{
 		"$set": bson.M{
-			"resultsCount":         count,
-			"status":               "completed",
-			"website":              website,
-			"domain":               domain,
-			"linkedinCompanyUrl":   strings.TrimSpace(linkedinCompanyURL),
-			"completedAt":          time.Now(),
+			"resultsCount":       count,
+			"status":             "completed",
+			"website":            website,
+			"domain":             domain,
+			"linkedinCompanyUrl": strings.TrimSpace(linkedinCompanyURL),
+			"completedAt":        time.Now(),
 		},
 	}
 	collection.UpdateByID(ctx, searchID, update)
@@ -705,4 +773,47 @@ type ValidationError struct {
 
 func (ve *ValidationError) Error() string {
 	return ve.Message
+}
+
+// CHANGE #5: Cache website scrape methods
+// getCachedWebsiteScrape retrieves cached website scrape from MongoDB
+func (ls *LeadService) getCachedWebsiteScrape(ctx context.Context, domain string) (*scraper.WebsiteScrapeResult, error) {
+	collection := ls.db.Instance.Collection("website_cache")
+
+	// Check if cache exists and is not older than 24 hours
+	filter := bson.M{
+		"domain": strings.ToLower(domain),
+		"createdAt": bson.M{
+			"$gt": time.Now().Add(-24 * time.Hour),
+		},
+	}
+
+	var cached struct {
+		Domain string
+		Result *scraper.WebsiteScrapeResult
+	}
+
+	err := collection.FindOne(ctx, filter).Decode(&cached)
+	if err != nil {
+		return nil, err
+	}
+
+	return cached.Result, nil
+}
+
+// cacheWebsiteScrape stores website scrape result in MongoDB
+func (ls *LeadService) cacheWebsiteScrape(ctx context.Context, domain string, result *scraper.WebsiteScrapeResult) error {
+	collection := ls.db.Instance.Collection("website_cache")
+
+	filter := bson.M{"domain": strings.ToLower(domain)}
+	update := bson.M{
+		"$set": bson.M{
+			"domain":    strings.ToLower(domain),
+			"result":    result,
+			"createdAt": time.Now(),
+		},
+	}
+
+	_, err := collection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	return err
 }
