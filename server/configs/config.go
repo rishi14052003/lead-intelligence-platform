@@ -19,6 +19,7 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPFrom     string
+	RedisURL     string // CHANGE #8: Redis URL for caching
 }
 
 // SMTPConfig holds SMTP configuration
@@ -53,6 +54,7 @@ func LoadConfig() *Config {
 		SMTPUser:     getEnv("SMTP_USER", ""),
 		SMTPPassword: getEnv("SMTP_PASS", ""),
 		SMTPFrom:     getEnv("EMAIL_FROM", ""),
+		RedisURL:     getEnv("REDIS_URL", "localhost:6379"), // CHANGE #8: Default to local Redis
 	}
 
 	return appConfig

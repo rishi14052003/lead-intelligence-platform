@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"lead-finder/configs"
+	"lead-finder/internal/cache" // CHANGE #8: Import cache
 	"lead-finder/internal/database"
 	"lead-finder/internal/models"
 	"lead-finder/internal/scraper"
@@ -39,10 +40,22 @@ func NewLeadService(db *database.Database) *LeadService {
 		grokService = NewGrokService(config.GrokAPIKey)
 	}
 
+	googleScraper := scraper.NewGoogleScraper()
+
+	// CHANGE #8: Initialize Redis cache if available
+	if config != nil && config.RedisURL != "" {
+		cacheManager, err := cache.NewCacheManager(config.RedisURL)
+		if err != nil {
+			log.Printf("⚠️ Redis cache initialization failed: %v", err)
+		} else if cacheManager.IsAvailable() {
+			googleScraper.SetCache(cacheManager)
+		}
+	}
+
 	return &LeadService{
 		db:             db,
 		webScraper:     scraper.NewWebScraper(),
-		googleScraper:  scraper.NewGoogleScraper(),
+		googleScraper:  googleScraper,
 		linkedinParser: scraper.NewLinkedInParser(),
 		scoringService: NewScoringService(),
 		emailService:   NewEmailService(),
@@ -251,31 +264,44 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		}
 	}
 
-	// Step 4: Grok AI Enrichment
-	linkedinDataForGrok := liRes.profiles
-	if linkedinCompanyURL != "" {
-		linkedinDataForGrok = append([]map[string]string{{
-			"type":        "linkedin_company_page",
-			"url":         linkedinCompanyURL,
-			"description": "LinkedIn company page discovered via Serper; employee profiles should align with this org.",
-		}}, liRes.profiles...)
+	// CHANGE #6: Start Grok enrichment asynchronously
+	type grokResult struct {
+		enriched *EnrichedCompany
+		err      error
 	}
-	var enriched *EnrichedCompany
+	grokChan := make(chan grokResult, 1)
+
 	if ls.grokService != nil {
-		log.Println("🤖 Sending data to Grok AI for enrichment...")
-		var grokErr error
-		enriched, grokErr = ls.grokService.EnrichLeads(companyName, website, location, linkedinDataForGrok, websiteDataForGrok, websiteText)
-		if grokErr != nil {
-			log.Printf("⚠️ Grok enrichment failed: %v", grokErr)
-		} else {
-			log.Printf("✓ Grok returned %d enriched leads", len(enriched.Leads))
+		linkedinDataForGrok := liRes.profiles
+		if linkedinCompanyURL != "" {
+			linkedinDataForGrok = append([]map[string]string{{
+				"type":        "linkedin_company_page",
+				"url":         linkedinCompanyURL,
+				"description": "LinkedIn company page discovered via Serper; employee profiles should align with this org.",
+			}}, liRes.profiles...)
 		}
+
+		go func() {
+			log.Println("🤖 Sending data to Grok AI for enrichment (async)...")
+			enriched, grokErr := ls.grokService.EnrichLeads(companyName, website, location, linkedinDataForGrok, websiteDataForGrok, websiteText)
+			grokChan <- grokResult{enriched: enriched, err: grokErr}
+		}()
 	} else {
 		log.Println("⚠️ Grok service not configured (GROK_API_KEY missing)")
+		grokChan <- grokResult{enriched: nil, err: nil}
 	}
 
-	// Step 5: Build final leads map
+	// Step 4 & 5: Build final leads map (continue while Grok runs in background)
 	leadsMap := make(map[string]*models.Lead)
+
+	// Receive Grok result (will wait for async call to complete)
+	grokRes := <-grokChan
+	if grokRes.err != nil {
+		log.Printf("⚠️ Grok enrichment failed: %v", grokRes.err)
+	} else if grokRes.enriched != nil {
+		log.Printf("✓ Grok returned %d enriched leads", len(grokRes.enriched.Leads))
+	}
+	enriched := grokRes.enriched
 
 	if enriched != nil {
 		for _, l := range enriched.Leads {

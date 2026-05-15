@@ -15,14 +15,26 @@ export interface Lead {
   createdAt?: string;
 }
 
-export async function searchLeads(query: string, location?: string): Promise<Lead[]> {
+// CHANGE #10: Response interface with pagination info
+export interface SearchResponse {
+  success: boolean;
+  message: string;
+  data: Lead[];
+  total?: number;
+  page?: number;
+  hasMore?: boolean;
+}
+
+export async function searchLeads(query: string, location?: string, signal?: AbortSignal, page: number = 1): Promise<Lead[]> {
   try {
     const requestBody = {
       query,
       ...(location && { location }), // Include location only if provided
+      page, // CHANGE #10: Include page number
     };
 
-    const response = await api.post("/search", requestBody);
+    // CHANGE #9: Pass abort signal to API request
+    const response = await api.post("/search", requestBody, { signal });
     
     if (!response.data) {
       throw new Error("No response from server");
@@ -49,6 +61,43 @@ export async function searchLeads(query: string, location?: string): Promise<Lea
 
     return data;
   } catch (error: any) {
+    // CHANGE #9: Silently handle abort errors (user cancelled the request)
+    if (error.name === "AbortError") {
+      console.log("🚫 Search request cancelled by user");
+      return [];
+    }
+    console.error("Search error:", error);
+    throw error;
+  }
+}
+
+// CHANGE #10: New function to get full response with pagination info
+export async function searchLeadsWithPagination(query: string, location?: string, signal?: AbortSignal, page: number = 1): Promise<SearchResponse> {
+  try {
+    const requestBody = {
+      query,
+      ...(location && { location }),
+      page,
+    };
+
+    const response = await api.post("/search", requestBody, { signal });
+    
+    if (!response.data) {
+      throw new Error("No response from server");
+    }
+
+    const { success, message } = response.data;
+    
+    if (!success) {
+      throw new Error(message || "Search failed");
+    }
+
+    return response.data;
+  } catch (error: any) {
+    if (error.name === "AbortError") {
+      console.log("🚫 Search request cancelled by user");
+      return { success: false, message: "Cancelled", data: [] };
+    }
     console.error("Search error:", error);
     throw error;
   }

@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"lead-finder/internal/cache" // CHANGE #8: Import cache for Redis
 )
 
 // SerperOrganicItem is one organic search result from Serper.
@@ -29,6 +32,7 @@ type SerperResponse struct {
 type GoogleScraper struct {
 	client    *http.Client
 	serperKey string
+	cache     *cache.CacheManager // CHANGE #8: Redis cache for Serper results
 }
 
 // NewGoogleScraper creates scraper instance
@@ -43,7 +47,13 @@ func NewGoogleScraper() *GoogleScraper {
 			},
 		},
 		serperKey: serperKey,
+		cache:     nil,
 	}
+}
+
+// CHANGE #8: SetCache attaches a Redis cache manager to the scraper
+func (gs *GoogleScraper) SetCache(cm *cache.CacheManager) {
+	gs.cache = cm
 }
 
 // serperGoogleSearch executes a Google search through Serper (google.serper.dev).
@@ -403,6 +413,18 @@ func (gs *GoogleScraper) SearchLinkedInProfiles(company, role, location, linkedi
 // searchViaSerper uses Serper API
 func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locationHint, linkedinCompanySlug string) ([]map[string]string, error) {
 	linkedinCompanySlug = strings.TrimSpace(linkedinCompanySlug)
+
+	// CHANGE #8: Check cache first
+	if gs.cache != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if cached, hit, err := gs.cache.GetCachedResults(ctx, query, role, companyForSlugCheck, locationHint); hit && err == nil {
+			return cached, nil
+		} else if err != nil {
+			log.Printf("⚠️ Cache lookup error: %v", err)
+		}
+	}
+
 	result, err := gs.serperGoogleSearch(query)
 	if err != nil {
 		return nil, err
@@ -411,8 +433,15 @@ func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locat
 
 	var profiles []map[string]string
 	seen := make(map[string]bool)
+	const maxProfiles = 15 // CHANGE #7: Limit early to avoid wasting time on irrelevant results
 
 	for _, item := range result.Organic {
+		// CHANGE #7: Early exit when threshold reached
+		if len(profiles) >= maxProfiles {
+			log.Printf("✅ Reached profile limit (%d), stopping collection", maxProfiles)
+			break
+		}
+
 		link := item.Link
 
 		if !strings.Contains(link, "linkedin.com/in/") {
@@ -471,6 +500,16 @@ func (gs *GoogleScraper) searchViaSerper(query, role, companyForSlugCheck, locat
 	}
 
 	log.Printf("✅ SERPER PROFILES FOUND: %d", len(profiles))
+
+	// CHANGE #8: Cache results for 7 days
+	if gs.cache != nil && len(profiles) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		if err := gs.cache.CacheResults(ctx, query, role, companyForSlugCheck, locationHint, profiles); err != nil {
+			log.Printf("⚠️ Failed to cache results: %v", err)
+		}
+	}
+
 	return profiles, nil
 }
 

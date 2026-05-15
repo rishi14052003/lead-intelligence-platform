@@ -16,12 +16,17 @@ import (
 type SearchRequest struct {
 	Query    string `json:"query"`
 	Location string `json:"location,omitempty"`
+	Page     int    `json:"page,omitempty"` // CHANGE #10: Added for pagination
 }
 
 type SearchResponse struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
+	// CHANGE #10: Added pagination fields
+	Total   int  `json:"total,omitempty"`
+	Page    int  `json:"page,omitempty"`
+	HasMore bool `json:"hasMore,omitempty"`
 }
 
 // SearchHandler handles the search endpoint
@@ -97,11 +102,44 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CHANGE #10: Implement pagination - default page 1 with 20 leads per page
+	pageSize := 20
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+
+	totalLeads := len(leads)
+	startIdx := (page - 1) * pageSize
+	endIdx := startIdx + pageSize
+
+	var paginatedLeads interface{} = leads
+
+	// Only paginate if there are leads to paginate
+	if totalLeads > 0 {
+		if startIdx >= totalLeads {
+			// Return empty array if page is out of range
+			paginatedLeads = []interface{}{}
+		} else {
+			if endIdx > totalLeads {
+				endIdx = totalLeads
+			}
+			paginatedLeads = leads[startIdx:endIdx]
+		}
+	}
+
+	hasMore := endIdx < totalLeads
+
+	log.Printf("✅ Pagination: total=%d, page=%d, pageSize=%d, hasMore=%v", totalLeads, page, pageSize, hasMore)
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(SearchResponse{
 		Success: true,
 		Message: "Search completed successfully",
-		Data:    leads,
+		Data:    paginatedLeads,
+		Total:   totalLeads,
+		Page:    page,
+		HasMore: hasMore,
 	})
 }
 
