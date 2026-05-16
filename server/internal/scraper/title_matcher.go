@@ -303,6 +303,7 @@ func containsTitleKeyword(seg string) bool {
 }
 
 // cleanTitle strips noise from an extracted title segment.
+// PRESERVES the original title format from LinkedIn instead of normalizing to abbreviations.
 func cleanTitle(s string) string {
 	// Remove trailing "at <CompanyName>" fragments that sometimes bleed in
 	atRe := regexp.MustCompile(`(?i)\s+at\s+.+$`)
@@ -314,23 +315,8 @@ func cleanTitle(s string) string {
 
 	s = strings.TrimSpace(s)
 
-	// Canonical normalizations
-	switch strings.ToLower(s) {
-	case "chief executive officer", "chief executive":
-		return "CEO"
-	case "chief technology officer", "chief technical officer":
-		return "CTO"
-	case "chief financial officer":
-		return "CFO"
-	case "chief operating officer":
-		return "COO"
-	case "chief marketing officer":
-		return "CMO"
-	case "chief revenue officer":
-		return "CRO"
-	case "chief human resources officer":
-		return "Head of HR"
-	}
+	// PRESERVE original title format - don't convert to abbreviations
+	// Just return the cleaned title as-is
 	return s
 }
 

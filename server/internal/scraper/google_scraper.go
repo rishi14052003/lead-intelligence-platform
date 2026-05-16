@@ -524,6 +524,7 @@ func extractNameFromSerperTitle(serperTitle string) string {
 }
 
 // validateAndNormalizeName checks that a string looks like a person name (2-4 words, letters only).
+// PRESERVES the original format from LinkedIn instead of reformatting.
 func validateAndNormalizeName(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -546,7 +547,7 @@ func validateAndNormalizeName(s string) string {
 	titleWords := []string{
 		"ceo", "cto", "cfo", "coo", "vp", "founder", "director", "manager",
 		"head", "chief", "officer", "president", "linkedin", "official",
-		"india", "pvt", "ltd", "inc", "llc", "corp",
+		"pvt", "ltd", "inc", "llc", "corp",
 	}
 	joined := strings.ToLower(strings.Join(words, " "))
 	for _, tw := range titleWords {
@@ -554,13 +555,8 @@ func validateAndNormalizeName(s string) string {
 			return ""
 		}
 	}
-	// Capitalize properly
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(string(w[0])) + strings.ToLower(w[1:])
-		}
-	}
-	return strings.Join(words, " ")
+	// PRESERVE original format from LinkedIn - don't reformat or capitalize
+	return s
 }
 
 // extractEmailFromText finds an email address in arbitrary text.
