@@ -221,13 +221,25 @@ func roleSearchVariants(canonical string) []string {
 	case "cto":
 		return []string{"CTO", "Chief Technology Officer", "Chief Technical Officer"}
 	case "founder":
-		return []string{"Founder", "Co-Founder", "Co Founder", "Cofounder"}
+		return []string{"Founder", "Co-Founder", "Co Founder", "Cofounder", "Co-founder"}
 	case "hr head":
 		return []string{"HR Head", "Head of HR", "Head of Human Resources", "CHRO", "Chief Human Resources Officer", "VP HR", "VP Human Resources"}
 	case "head of sales":
 		return []string{"Head of Sales", "Sales Head", "VP Sales", "Vice President Sales", "Chief Revenue Officer", "CRO", "VP of Sales"}
 	case "vice president":
 		return []string{"Vice President", "VP", "V.P."}
+	case "president":
+		return []string{"President", "Company President", "Managing President"}
+	case "owner":
+		return []string{"Owner", "Business Owner", "Company Owner", "Founder & Owner"}
+	case "co-owner":
+		return []string{"Co-Owner", "Co Owner"}
+	case "cro":
+		return []string{"CRO", "Chief Revenue Officer", "VP Revenue"}
+	case "cfo":
+		return []string{"CFO", "Chief Financial Officer"}
+	case "coo":
+		return []string{"COO", "Chief Operating Officer"}
 	default:
 		return []string{c}
 	}

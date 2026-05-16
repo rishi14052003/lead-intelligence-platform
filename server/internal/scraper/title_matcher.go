@@ -78,6 +78,7 @@ func CategorizeTitle(titleOrSnippet string) (string, bool) {
 		"executive director", "general manager",
 		"entrepreneur", "founding member", "startup founder",
 		"founding team", "leadership", "director",
+		"co-owner", "co owner",
 	) {
 		return string(CategoryFoundersOwnership), true
 	}
@@ -101,8 +102,9 @@ func CategorizeTitle(titleOrSnippet string) (string, bool) {
 		"recruiter", "talent acquisition", "talent partner",
 		"hiring manager", "people operations",
 		"head of hr", "hr manager", "hr director",
-		"recruitment lead",
+		"recruitment lead", "recruitment manager",
 		"chro", "chief human resources officer",
+		"talent manager", "talent director",
 	) {
 		return string(CategoryHRRecruitment), true
 	}
@@ -115,6 +117,7 @@ func CategorizeTitle(titleOrSnippet string) (string, bool) {
 		"business development manager", "growth manager",
 		"partnerships manager", "account executive",
 		"enterprise sales", "revenue operations",
+		"sales manager", "sales leader",
 	) {
 		return string(CategorySalesBD), true
 	}

@@ -367,3 +367,125 @@ func (lp *LinkedInParser) ValidateCompanyInContext(company string, context strin
 	}
 	return strings.Contains(strings.ToLower(context), strings.ToLower(company))
 }
+
+// ExtractNameFromLinkedInProfile attempts to extract the person's name from a LinkedIn profile page.
+// Tries multiple strategies: meta tags, schema.org markup, page headings, etc.
+func (lp *LinkedInParser) ExtractNameFromLinkedInProfile(profileURL string) string {
+	profileURL = strings.TrimSpace(profileURL)
+	if profileURL == "" || !strings.Contains(strings.ToLower(profileURL), "linkedin.com/in/") {
+		return ""
+	}
+
+	html, err := lp.googleScraper.FetchHTML(profileURL)
+	if err != nil || strings.TrimSpace(html) == "" {
+		log.Printf("⚠️ Could not fetch LinkedIn profile %s for name extraction: %v", profileURL, err)
+		return ""
+	}
+
+	// Strategy 1: Open Graph meta tag (og:title)
+	ogTitleRe := regexp.MustCompile(`(?i)<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']`)
+	if m := ogTitleRe.FindStringSubmatch(html); len(m) > 1 {
+		name := extractNameFromSerperTitle(m[1])
+		if name != "" {
+			log.Printf("📝 Found name in og:title: %s", name)
+			return name
+		}
+	}
+
+	// Strategy 2: Page title tag
+	titleRe := regexp.MustCompile(`(?i)<title[^>]*>([^<]+)</title>`)
+	if m := titleRe.FindStringSubmatch(html); len(m) > 1 {
+		name := extractNameFromSerperTitle(m[1])
+		if name != "" {
+			log.Printf("📝 Found name in page title: %s", name)
+			return name
+		}
+	}
+
+	// Strategy 3: Schema.org Person markup
+	schemaRe := regexp.MustCompile(`(?i)["']name["']\s*:\s*["']([^"']+)["']`)
+	if m := schemaRe.FindStringSubmatch(html); len(m) > 1 {
+		name := validateAndNormalizeName(m[1])
+		if name != "" {
+			log.Printf("📝 Found name in schema markup: %s", name)
+			return name
+		}
+	}
+
+	// Strategy 4: H1 heading (often contains name)
+	h1Re := regexp.MustCompile(`(?i)<h1[^>]*>([^<]+)</h1>`)
+	if m := h1Re.FindStringSubmatch(html); len(m) > 1 {
+		name := validateAndNormalizeName(m[1])
+		if name != "" {
+			log.Printf("📝 Found name in H1: %s", name)
+			return name
+		}
+	}
+
+	return ""
+}
+
+// ExtractEmailAndPhoneFromLinkedInProfile attempts to extract contact info from a LinkedIn profile.
+// Looks for email and phone in the contact information section visible on public profiles.
+func (lp *LinkedInParser) ExtractEmailAndPhoneFromLinkedInProfile(profileURL string) (string, string) {
+	profileURL = strings.TrimSpace(profileURL)
+	if profileURL == "" || !strings.Contains(strings.ToLower(profileURL), "linkedin.com/in/") {
+		return "", ""
+	}
+
+	html, err := lp.googleScraper.FetchHTML(profileURL)
+	if err != nil || strings.TrimSpace(html) == "" {
+		log.Printf("⚠️ Could not fetch LinkedIn profile %s for contact info: %v", profileURL, err)
+		return "", ""
+	}
+
+	var email, phone string
+
+	// Strategy 1: Look for contact info links/attributes in the raw HTML
+	// LinkedIn sometimes exposes email and phone as data attributes or in contact sections
+
+	// Try to find email in any visible text patterns within contact sections
+	emailRe := regexp.MustCompile(`(?i)(?:email|contact).*?[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+	if m := emailRe.FindString(html); m != "" {
+		// Extract just the email part
+		emailPartRe := regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+		if emailMatch := emailPartRe.FindString(m); emailMatch != "" {
+			email = strings.ToLower(emailMatch)
+		}
+	}
+
+	// Try to find phone number in contact patterns
+	phoneRe := regexp.MustCompile(`(?i)(?:phone|tel|mobile).*?[\+]?[\d\s\(\)\-]{8,}`)
+	if m := phoneRe.FindString(html); m != "" {
+		// Extract just the phone number part
+		phonePartRe := regexp.MustCompile(`[\+]?[\d\s\(\)\-]{8,}`)
+		if phoneMatch := phonePartRe.FindString(m); phoneMatch != "" {
+			phone = strings.TrimSpace(phoneMatch)
+		}
+	}
+
+	if email != "" && !validateEmail(email) {
+		email = ""
+	}
+
+	return email, phone
+}
+
+// validateEmail is a simple email validation helper
+func validateEmail(email string) bool {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	if len(parts[0]) == 0 || len(parts[1]) < 3 {
+		return false
+	}
+	if !strings.Contains(parts[1], ".") {
+		return false
+	}
+	return true
+}

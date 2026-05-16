@@ -127,7 +127,7 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 
-		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President"}
+		roles := []string{"CEO", "CTO", "Founder", "HR Head", "Head of Sales", "Vice President", "President", "Owner", "Co-Owner", "CFO", "COO", "CRO"}
 		semaphore := make(chan struct{}, 4)
 		const successThreshold = 5
 		done := false
@@ -226,6 +226,50 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 	// ── Step 4: Build leads map from LinkedIn profiles ───────────────────────
 	leadsMap := make(map[string]*models.Lead)
 
+	// Pre-fetch names and contact info from LinkedIn profiles where needed
+	type profileEnrichment struct {
+		url   string
+		name  string
+		email string
+		phone string
+	}
+	enrichmentCache := make(map[string]profileEnrichment)
+	var enrichmentMu sync.Mutex
+	var enrichWg sync.WaitGroup
+	enrichSemaphore := make(chan struct{}, 5)
+
+	for _, p := range liRes.profiles {
+		linkedinProfileURL := strings.TrimSpace(p["url"])
+		if linkedinProfileURL == "" {
+			continue
+		}
+
+		// Check if name is weak or missing
+		name := strings.TrimSpace(p["name"])
+		if name == "" || !utils.ValidateName(name) {
+			enrichWg.Add(1)
+			go func(url string) {
+				defer enrichWg.Done()
+				enrichSemaphore <- struct{}{}
+				defer func() { <-enrichSemaphore }()
+
+				// Try to extract name from LinkedIn profile page
+				profileName := ls.linkedinParser.ExtractNameFromLinkedInProfile(url)
+				email, phone := ls.linkedinParser.ExtractEmailAndPhoneFromLinkedInProfile(url)
+
+				enrichmentMu.Lock()
+				enrichmentCache[url] = profileEnrichment{
+					url:   url,
+					name:  profileName,
+					email: email,
+					phone: phone,
+				}
+				enrichmentMu.Unlock()
+			}(linkedinProfileURL)
+		}
+	}
+	enrichWg.Wait()
+
 	for _, p := range liRes.profiles {
 		name := strings.TrimSpace(p["name"])
 		jobTitle := strings.TrimSpace(p["title"])
@@ -233,6 +277,22 @@ func (ls *LeadService) SearchAndEnrichLeads(query string, location string, userI
 		linkedinProfileURL := strings.TrimSpace(p["url"])
 		// Email may already be present if found in the Serper snippet
 		snippetEmail := strings.TrimSpace(p["email"])
+
+		// Try enriched data from LinkedIn profile page if initial name was weak
+		if !utils.ValidateName(name) {
+			enrichmentMu.Lock()
+			if enrich, ok := enrichmentCache[linkedinProfileURL]; ok {
+				if enrich.name != "" {
+					name = enrich.name
+					log.Printf("✓ Enhanced name from LinkedIn profile: %s", name)
+				}
+				// Use email from profile if not in snippet
+				if snippetEmail == "" && enrich.email != "" {
+					snippetEmail = enrich.email
+				}
+			}
+			enrichmentMu.Unlock()
+		}
 
 		if name == "" || linkedinProfileURL == "" || !utils.ValidateName(name) {
 			continue
