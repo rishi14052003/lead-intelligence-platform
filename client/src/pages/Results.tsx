@@ -170,35 +170,16 @@ export default function Results() {
     return () => clearTimeout(timer);
   }, [filter, leads.length]);
 
-  const roles = [
-    "All",
-    "FOUNDERS & OWNERSHIP",
-    "TECH & PRODUCT LEADERSHIP",
-    "HR & RECRUITMENT",
-    "SALES & BUSINESS DEVELOPMENT",
-    "MARKETING & OPERATIONS",
-  ];
-
-  const getLeadPriority = (category: string | undefined, jobTitle: string): number => {
-    const c = (category || "").toLowerCase().trim();
-    const t = (jobTitle || "").toLowerCase().trim();
-    // Prefer exec ownership titles first, then tech, then revenue/ops.
-    if (t.includes("founder") || t.includes("owner") || t.includes("ceo") || t.includes("chief executive")) return 1;
-    if (t.includes("cto") || t.includes("chief technology") || c.includes("tech")) return 2;
-    if (c.includes("sales") || t.includes("cro") || t.includes("revenue")) return 3;
-    if (c.includes("hr") || t.includes("talent") || t.includes("recruit")) return 4;
-    if (c.includes("marketing") || t.includes("operations") || t.includes("coo") || t.includes("strategy")) return 5;
-    return 9;
-  };
+  // Extract unique categories dynamically from the leads data
+  const uniqueCategories = Array.from(
+    new Set(leads.map((l) => l.matchedCategory).filter(Boolean))
+  ).sort() as string[];
+  const roles = ["All", ...uniqueCategories];
 
   const filtered =
     filter === "All"
-      ? leads
-          .slice()
-          .sort((a, b) => getLeadPriority(a.matchedCategory, a.role) - getLeadPriority(b.matchedCategory, b.role))
-      : leads
-          .filter((l) => (l.matchedCategory || "") === filter)
-          .sort((a, b) => getLeadPriority(a.matchedCategory, a.role) - getLeadPriority(b.matchedCategory, b.role));
+      ? leads.slice()
+      : leads.filter((l) => (l.matchedCategory || "") === filter);
 
   const isLeadSaved = (lead: Lead) => savedLeadSignatures.has(getLeadSignature(lead));
 

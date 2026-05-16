@@ -171,7 +171,7 @@ func (gs *GrokService) EnrichLeads(companyName, website, location string, linked
 
 	var validLeads []EnrichedLead
 	for _, l := range enriched.Leads {
-		if l.Name != "" && len(l.Name) > 2 {
+		if l.Name != "" && len(l.Name) > 2 && !isPlaceholderLeadName(l.Name) {
 			validLeads = append(validLeads, l)
 		}
 	}
@@ -223,7 +223,7 @@ Return ONLY this JSON, no markdown, no extra text:
   "website": "%s",
   "leads": [
     {
-      "name": "Full Name",
+      "name": "Example Person",
       "role": "CEO",
       "linkedin": null,
       "email": null,
@@ -260,6 +260,24 @@ func scoreByRole(role string) int {
 func contains(s string, keywords ...string) bool {
 	for _, k := range keywords {
 		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPlaceholderLeadName(name string) bool {
+	n := strings.TrimSpace(strings.ToLower(name))
+	if n == "" {
+		return true
+	}
+	placeholders := []string{
+		"full name", "first name", "last name", "name surname",
+		"john doe", "jane doe", "john smith", "example person",
+		"unknown", "n/a", "na", "not available", "example name",
+	}
+	for _, p := range placeholders {
+		if n == p {
 			return true
 		}
 	}

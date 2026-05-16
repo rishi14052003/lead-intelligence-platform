@@ -21,11 +21,7 @@ func main() {
 	log.Printf("Starting server in %s mode", cfg.Environment)
 	log.Printf("Client URL: %s", cfg.ClientURL)
 
-	if cfg.GrokAPIKey != "" {
-		log.Println("✓ Grok AI API key configured")
-	} else {
-		log.Println("⚠️ Grok API key not set - set GROK_API_KEY environment variable to enable AI enrichment")
-	}
+	log.Println("✓ Lead search uses Serper + website scraping only (no AI-generated leads)")
 
 	db, err := database.Init(cfg.MongoURI, cfg.DBName)
 	if err != nil {

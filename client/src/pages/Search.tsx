@@ -67,8 +67,6 @@ const HOW_IT_WORKS = [
   },
 ];
 
-const EXAMPLE_QUERIES = ["Stripe", "OpenAI", "Shopify", "Notion", "Figma"];
-
 export default function SearchPage() {
   const [company, setCompany] = useState("");
   const [location, setLocation] = useState("");
@@ -245,21 +243,6 @@ export default function SearchPage() {
               )}
             </form>
 
-            {/* Example chips */}
-            <div className="search-examples-row">
-              <span className="search-examples-label">Try:</span>
-              {EXAMPLE_QUERIES.map((q) => (
-                <button
-                  key={q}
-                  className="search-example-chip"
-                  onClick={() => setCompany(q)}
-                  disabled={loading}
-                  type="button"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
